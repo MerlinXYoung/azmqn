@@ -2,6 +2,7 @@
 #include <azmqn/detail/frames.hpp>
 
 #include <boost/range/algorithm/copy.hpp>
+#include <boost/range/algorithm/fill.hpp>
 #include <boost/system/error_code.hpp>
 
 #include <array>
@@ -80,7 +81,8 @@ struct sync_read_stream {
         size_t bytes_transferred = 0;
         if (it_ != std::end(bufs_)) {
             bytes_transferred = asio::buffer_copy(buf, buf_);
-            if (bytes_transferred == asio::buffer_size(buf_))
+            buf_ = buf_ + bytes_transferred;
+            if (asio::buffer_size(buf_) == 0)
                 buf_ = *++it_;
         }
         return bytes_transferred;
@@ -88,8 +90,6 @@ struct sync_read_stream {
 };
 
 TEST_CASE("read short frame", "[frames]") {
-    std::cout << "sizeof(message_t) => " << sizeof(framing::message_t) << std::endl;
-    std::cout << "sizeof(result_t) => " << sizeof(framing::result_t) << std::endl;
     sync_read_stream s;
     std::array<octet_t, 5> b{ 0x00, 0x03, 'f', 'o', 'o' };
     s.reset(asio::const_buffers_1{boost::asio::buffer(b)});
@@ -99,3 +99,16 @@ TEST_CASE("read short frame", "[frames]") {
     REQUIRE_NOTHROW(boost::get<framing::message_t>(res));
 }
 
+TEST_CASE("read long frame", "[frames]") {
+    sync_read_stream s;
+    std::array<octet_t, 512 + wire::max_framing_octets> b{ 0x02, 0};
+    auto buf = asio::buffer(b) + sizeof(octet_t);
+    wire::put_uint64(buf, b.size() - wire::max_framing_octets);
+
+    std::fill(b.begin() + wire::max_framing_octets, b.end(), 'o');
+    s.reset(asio::const_buffers_1{boost::asio::buffer(b)});
+
+    boost::system::error_code ec;
+    auto res = framing::read(s, ec);
+    //REQUIRE_NOTHROW(boost::get<framing::message_t>(res));
+}

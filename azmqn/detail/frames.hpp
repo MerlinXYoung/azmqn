@@ -25,11 +25,13 @@ namespace  azmqn::detail::transport {
         using message_t = wire::message_t;
 
         // Initialize from a command
-        framing(command_t c) : res_(std::move(c))
+        framing(command_t c)
+            : res_(std::move(c))
         { }
 
         // Initialize from a message
-        framing(message_t m) : res_(std::move(m))
+        framing(message_t m)
+            : res_(std::move(m))
         { }
 
         struct none_t { };
@@ -53,43 +55,49 @@ namespace  azmqn::detail::transport {
 
         template<typename SyncWriteStream,
                  typename Writable>
-        static size_t write(SyncWriteStream& s, Writable const& w, boost::system::error_code& ec) {
+        static size_t write(SyncWriteStream& s, Writable const& w,
+                            boost::system::error_code& ec) {
             framing f(w, ref_only);
             return boost::asio::write(s, f.get_write_buffers(w.buf), ec);
         }
 
-        // The framing argument must remain valid until the completion handler is called 
-        // Completion handler's signature is void handler(boost::system::error_code const&, result_t)
+        // The framing argument must remain valid until the completion handler
+        // is called. Completion handler's signature is -
+        //      void handler(boost::system::error_code const&, result_t)
         template<typename AsyncReadStream,
                  typename CompletionHandler>
-        static void async_read(AsyncReadStream& s, framing& f, CompletionHandler handler) {
+        static void async_read(AsyncReadStream& s, framing& f,
+                               CompletionHandler handler) {
             BOOST_ASSERT(f.empty());
-            f.async_read_until_framed(s, [&, handler{ std::move(handler) }](auto const& ec, size_t) {
-                if (ec) {
-                    handler(ec, none_t{ });
-                } else {
-                    auto b = f.init_buffer();
-                    boost::asio::async_read(s, boost::asio::buffer(b),
-                                            [&, handler{ std::move(handler) }](auto const& ec, size_t) {
-                        if (ec) {
-                            handler(ec, result_t{});
-                        } else {
-                            handler(ec, std::move(f.res_));
-                            f.res_ = none_t{};
-                        }
-                    });
-                }
+            f.async_read_until_framed(s,
+                [&, handler{ std::move(handler) }](auto const& ec, size_t) {
+                    if (ec) {
+                        handler(ec, none_t{ });
+                    } else {
+                        auto b = f.init_buffer();
+                        boost::asio::async_read(s, boost::asio::buffer(b),
+                            [&, handler{ std::move(handler) }](auto const& ec, size_t) {
+                            if (ec) {
+                                handler(ec, result_t{});
+                            } else {
+                                handler(ec, std::move(f.res_));
+                                f.res_ = none_t{};
+                            }
+                        });
+                    }
             });
         }
 
-        // The framing argument must remain valid until the completion handler is called
-        // Completion handler's signature is the same as for boost::asio::async_write()
+        // The framing argument must remain valid until the completion handler
+        // is called. Completion handler's signature is the same as for
+        // boost::asio::async_write()
         template<typename AsyncWriteStream,
                  typename CompletionHandler>
         static void async_write(AsyncWriteStream& s, framing const& f,
                                 CompletionHandler&& handler) {
             BOOST_ASSERT(!f.empty());
-            boost::asio::async_write(s, f.get_write_buffers(), std::forward<CompletionHandler>(handler));
+            boost::asio::async_write(s, f.get_write_buffers(),
+                                     std::forward<CompletionHandler>(handler));
         }
 
     private:
@@ -100,20 +108,23 @@ namespace  azmqn::detail::transport {
         static constexpr struct ref_only_t { } ref_only;
 
         template<typename BufferBase>
-        framing(BufferBase const& b, ref_only_t) { b.set_frame_size(boost::asio::buffer(framing_)); }
+        framing(BufferBase const& b, ref_only_t)
+        { b.set_frame_size(boost::asio::buffer(framing_)); }
 
-        mutable_buffer_t framing_buffer() {
+        mutable_buffer_t mutable_framing_buffer() {
             return boost::asio::buffer(&framing_[0], wire::min_framing_octets);
         }
 
-        const_buffer_t framing_buffer() const {
-            return boost::asio::buffer(&framing_[0], is_long() ? wire::max_framing_octets
-                                                               : wire::min_framing_octets);
+        const_buffer_t const_framing_buffer() const {
+            return boost::asio::buffer(&framing_[0], is_long()
+                        ? wire::max_framing_octets
+                        : wire::min_framing_octets);
         }
 
-        mutable_buffer_t long_framing_buffer() {
+        mutable_buffer_t long_mutable_framing_buffer() {
+            static const auto long_size = wire::max_framing_octets - wire::min_framing_octets;
             return boost::asio::buffer(&framing_[wire::min_framing_octets],
-                                        wire::max_framing_octets - wire::min_framing_octets);
+                                        long_size);
         }
 
         bool empty() const { return bytes_transferred_ == 0; }
@@ -144,34 +155,27 @@ namespace  azmqn::detail::transport {
             return wire::is_command(framing_[0]);
         }
 
-        size_t advance(size_t v) {
-            bytes_transferred_ += v;
-            if (!valid()) {
-                return wire::min_framing_octets;
-            } else if (is_long()) {
-                return wire::max_framing_octets - bytes_transferred_;
-            } else {
-                return 0;
-            }
-        }
-
         size_t framed_length() const {
             BOOST_ASSERT(valid());
             size_t len;
             if (is_long()) {
-                std::tie(len, std::ignore) = wire::get_uint64(boost::asio::buffer(&framing_[1], sizeof(uint64_t)));
+                std::tie(len, std::ignore) = wire::get_uint64(
+                        boost::asio::buffer(&framing_[1], sizeof(uint64_t)));
             } else {
-                std::tie(len, std::ignore) = wire::get_uint8(boost::asio::buffer(&framing_[1], sizeof(uint8_t)));
+                std::tie(len, std::ignore) = wire::get_uint8(
+                        boost::asio::buffer(&framing_[1], sizeof(uint8_t)));
             }
             return len;
         }
 
-        struct mutable_buffer_visitor 
+        struct mutable_buffer_visitor
             : boost::static_visitor<mutable_buffer_t> {
-            mutable_buffer_t operator()(none_t &) const { return mutable_buffer_t(); }
+            mutable_buffer_t operator()(none_t &) const
+            { return mutable_buffer_t(); }
 
             template<typename T>
-            mutable_buffer_t operator()(T& t) const { return wire::buffer(t.buf); }
+            mutable_buffer_t operator()(T& t) const
+            { return wire::buffer(t.buf); }
         };
 
         mutable_buffer_t init_buffer() {
@@ -191,10 +195,12 @@ namespace  azmqn::detail::transport {
             set_buffer_size_visitor(wire::framing_t& framing)
                 : framing_(boost::asio::buffer(framing)) { }
 
-            mutable_buffer_t operator()(none_t &) const { return mutable_buffer_t(); }
+            mutable_buffer_t operator()(none_t &) const
+            { return mutable_buffer_t(); }
 
             template<typename T>
-            mutable_buffer_t operator()(T& t) const { return t.set_frame_size(framing_); }
+            mutable_buffer_t operator()(T& t) const
+            { return t.set_frame_size(framing_); }
         };
 
         mutable_buffer_t set_frame_size() {
@@ -204,34 +210,38 @@ namespace  azmqn::detail::transport {
 
         using write_bufs_t = std::array<const_buffer_t, 2>;
         write_bufs_t get_write_buffers(wire::buffer_t const& buf) const {
-            return write_bufs_t{ framing_buffer(), wire::buffer(buf) };
+            return write_bufs_t{ const_framing_buffer(), wire::buffer(buf) };
         }
 
-        struct const_buffer_visitor 
+        struct const_buffer_visitor
             : boost::static_visitor<const_buffer_t> {
-            const_buffer_t operator()(none_t const&) const { return const_buffer_t(); }
+            const_buffer_t operator()(none_t const&) const
+            { return const_buffer_t(); }
 
             template<typename T>
-            const_buffer_t operator()(T const& t) const { return wire::buffer(t.buf); }
+            const_buffer_t operator()(T const& t) const
+            { return wire::buffer(t.buf); }
         };
 
         write_bufs_t get_write_buffers() const {
             const_buffer_visitor v;
-            return write_bufs_t{ framing_buffer(), boost::apply_visitor(v, res_) };
+            return write_bufs_t{
+                const_framing_buffer(),
+                boost::apply_visitor(v, res_)
+            };
         }
 
         template<typename SyncReadStream>
         size_t read_until_framed(SyncReadStream& s,
                                  boost::system::error_code& ec) {
             BOOST_ASSERT(empty());
-
-            boost::asio::read(s, boost::asio::buffer(framing_buffer()), ec);
+            bytes_transferred_ = boost::asio::read(s, boost::asio::buffer(mutable_framing_buffer()), ec);
             if (ec) {
                 return 0;
             }
 
             if (is_long()) {
-                boost::asio::read(s, boost::asio::buffer(long_framing_buffer()), ec);
+                bytes_transferred_ += boost::asio::read(s, boost::asio::buffer(long_mutable_framing_buffer()), ec);
                 if (ec) {
                     return 0;
                 }
@@ -241,17 +251,20 @@ namespace  azmqn::detail::transport {
 
         template<typename AsyncReadStream,
                  typename CompletionHandler>
-        void async_read_until_long_framed(AsyncReadStream& s, CompletionHandler&& handler) {
+        void async_read_until_long_framed(AsyncReadStream& s,
+                                          CompletionHandler&& handler) {
             BOOST_ASSERT(!empty());
 
-            boost::asio::async_read(s, boost::asio::buffer(long_framing_buffer()),
-                                    [&, handler{ std::move(handler) }](auto const& ec, size_t) {
+            boost::asio::async_read(s, boost::asio::buffer(long_mutable_framing_buffer()),
+                [&, handler{ std::move(handler) }](auto const& ec,
+                                                   size_t bytes_transferred) {
                                         if (ec) {
                                             handler(ec, 0);
                                         } else {
+                                            bytes_transferred_ += bytes_transferred;
                                             handler(ec, framed_length());
                                         }
-                                    });    
+                                    });
         }
 
         template<typename AsyncReadStream,
@@ -259,11 +272,16 @@ namespace  azmqn::detail::transport {
         void async_read_until_framed(AsyncReadStream& s, CompletionHandler handler) {
             BOOST_ASSERT(empty());
 
-            boost::asio::async_read(s, boost::asio::buffer(framing_buffer()),
-                                    [&, handler{ std::move(handler) }](auto const& ec, size_t) {
+            boost::asio::async_read(s, boost::asio::buffer(mutable_framing_buffer()),
+                [&, handler{ std::move(handler) }](auto const& ec,
+                                                   size_t bytes_transferred) {
                                         if(ec) {
                                             handler(ec, 0);
-                                        } else if (is_long()) {
+                                            return;
+                                        }
+
+                                        bytes_transferred_ = bytes_transferred;
+                                        if (is_long()) {
                                             async_read_until_long_framed(s, std::move(handler));
                                         } else {
                                             handler(ec, framed_length());
@@ -271,6 +289,6 @@ namespace  azmqn::detail::transport {
                                     });
         }
     };
-} // namespace namespace azmqn::detail::transport
+} // namespace azmqn::detail::transport
 
 #endif // AZMQN_DETAIL_FRAMES_HPP

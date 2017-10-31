@@ -39,31 +39,42 @@ namespace  azmqn::detail::transport {
 
         template<typename T, flags selector>
         struct buffer_type_t : buffer_base_t {
-            using type = T;
-            using tag_type = std::integral_constant<std::underlying_type<flags>::type, +selector>;
+            using self_type = T;
 
             using buffer_base_t::buffer_base_t;
 
-            mutable_buffer_t set_frame_size(mutable_buffer_t b) const {
-                using el_t = typename decltype(buf)::value_type;
-                auto f = boost::asio::buffer_cast<el_t*>(b);
-                auto const lf = +(buf.size() > max_small_size ? flags::is_long : flags::none);
-                f[0] = tag_type::value
-                       | boost::hana::if_(has_flags(self()),
-                                 [&](auto&& x) { return static_cast<el_t>(x.get_flags()); },
-                                 [](auto&&) { return 0; })
-                            (self())
-                       | lf;
-                b + sizeof(el_t);
-                return lf ? put_uint64(b, buf.size())
-                          : put_uint8(b, buf.size());
+            mutable_buffer_t set_frame_size(at_least_mutable_buffer<sizeof(max_framing_octets)> b) const {
+                b.front() = tag_type::value | get_flags() | is_long();
+                auto bb = b.consume();
+                return is_long() ? put_uint64(bb, buf.size())
+                                 : put_uint8(bb, buf.size());
             }
 
         private:
-            static constexpr auto has_flags = boost::hana::is_valid([](auto&& x) -> decltype(x.get_flags()) { });
+            using flags_type = std::underlying_type<flags>::type;
+            using tag_type = std::integral_constant<flags_type, +selector>;
 
-            type const& self() const { return *reinterpret_cast<type const*>(this); }
-            type& self() { return *reinterpret_cast<type*>(this); }
+            static constexpr auto has_flags = boost::hana::is_valid(
+                                    [](auto&& x) -> decltype(x.get_flags()) { });
+
+            self_type const& self() const
+            { return *reinterpret_cast<self_type const*>(this); }
+
+            self_type& self()
+            { return *reinterpret_cast<self_type*>(this); }
+
+            using el_t = typename decltype(buf)::value_type;
+            el_t get_flags() const {
+                return boost::hana::if_(has_flags(self()),
+                        [&](auto&& x) { return static_cast<el_t>(x.get_flags()); },
+                        [](auto&&) { return 0; })
+                    (self());
+            }
+
+            el_t is_long() const {
+                return buf.size() > max_small_size ? +flags::is_long
+                                                   : +flags::none;
+            }
         };
 
         struct command_t : buffer_type_t<command_t, flags::is_command>
@@ -76,7 +87,13 @@ namespace  azmqn::detail::transport {
                 , more(m)
             { }
 
-            flags get_flags() const { return more ? flags::is_more : flags::none; }
+            message_t(const_buffer_t b, bool m)
+                : buffer_type_t(b)
+                , more(m)
+            { }
+
+            flags get_flags() const
+            { return more ? flags::is_more : flags::none; }
         };
     } // namespace wire
 } // namespace namespace azmqn::detail::transport

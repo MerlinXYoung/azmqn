@@ -21,7 +21,64 @@
 namespace  azmqn::detail::transport {
     using octet_t = unsigned char; // TODO std::byte
     using mutable_buffer_t = boost::asio::mutable_buffer;
+    using mutable_buffers_1_t = boost::asio::mutable_buffers_1;
     using const_buffer_t = boost::asio::const_buffer;
+    using const_buffers_1_t = boost::asio::const_buffers_1;
+
+    template<typename Buffer, size_t min_size>
+    struct at_least_buffer {
+        at_least_buffer(Buffer b) : b_(b)
+        { BOOST_ASSERT(boost::asio::buffer_size(b) >= min_size); }
+
+        at_least_buffer(mutable_buffers_1_t b) : b_{ *std::begin(b) }
+        { }
+
+        at_least_buffer(const_buffers_1_t b) : b_{ *std::begin(b) }
+        { }
+
+        Buffer& operator*() { return b_; }
+        Buffer const& operator*() const { return b_; }
+
+        octet_t const& front() { return *octets(); }
+
+        octet_t const& operator[](unsigned i) const
+        {
+            BOOST_ASSERT(i < boost::asio::buffer_size(b_));
+            return octets()[i];
+        }
+
+        Buffer consume() const
+        { return b_ + min_size; }
+
+    protected:
+        Buffer b_;
+
+        octet_t const* octets() const
+        { return boost::asio::buffer_cast<octet_t const*>(b_); }
+    };
+
+    template<size_t min_size>
+    struct at_least_mutable_buffer : at_least_buffer<mutable_buffer_t, min_size> {
+        using base_type = at_least_buffer<mutable_buffer_t, min_size>;
+        using base_type::base_type;
+
+        octet_t& front() {  return *octets(); }
+
+        octet_t& operator[](unsigned i) {
+            BOOST_ASSERT(i < boost::asio::buffer_size(base_type::b_));
+            return octets()[i];
+        }
+
+    protected:
+        octet_t* octets()
+        { return boost::asio::buffer_cast<octet_t*>(base_type::b_); }
+    };
+
+    template<size_t min_size>
+    struct at_least_const_buffer : at_least_buffer<const_buffer_t, min_size> {
+        using base_type = at_least_buffer<const_buffer_t, min_size>;
+        using base_type::base_type;
+    };
 
     namespace wire {
         constexpr auto small_size = 64;
@@ -61,56 +118,48 @@ namespace  azmqn::detail::transport {
         template<typename T>
         using result_t = std::pair<T, const_buffer_t>;
 
-        mutable_buffer_t put_uint8(boost::asio::mutable_buffer buf, uint8_t val) {
-            *boost::asio::buffer_cast<octet_t*>(buf) = val;
-            return buf + sizeof(val);
+        mutable_buffer_t put_uint8(at_least_mutable_buffer<sizeof(uint8_t)> b,
+                                   uint8_t val) {
+            b[0] = val;
+            return b.consume();
         }
 
-        result_t<uint8_t> get_uint8(boost::asio::const_buffer buf) {
-            BOOST_ASSERT(boost::asio::buffer_size(buf) >= sizeof(uint8_t));
-
-            auto const r = *boost::asio::buffer_cast<octet_t const*>(buf);
-            return std::make_pair(r, buf + sizeof(uint8_t));
+        result_t<uint8_t> get_uint8(at_least_const_buffer<sizeof(uint8_t)> b) {
+            return std::make_pair(b.front(), b.consume());
         }
 
-        mutable_buffer_t put_uint16(boost::asio::mutable_buffer buf, uint16_t val) {
-            auto b = boost::asio::buffer_cast<octet_t*>(buf);
+        mutable_buffer_t put_uint16(at_least_mutable_buffer<sizeof(uint16_t)> b,
+                                    uint16_t val) {;
             b[0] = static_cast<octet_t>(((val) >> 8) & 0xff);
             b[1] = static_cast<octet_t>(val & 0xff);
-            return buf + sizeof(val);
+            return b.consume();
         }
 
-        result_t<uint16_t> get_uint16(boost::asio::const_buffer buf) {
-            BOOST_ASSERT(boost::asio::buffer_size(buf) >= sizeof(uint16_t));
-
-            auto b = boost::asio::buffer_cast<octet_t const*>(buf);
+        result_t<uint16_t> get_uint16(at_least_const_buffer<sizeof(uint16_t)> b) {
             auto const r = static_cast<uint16_t>(b[0]) << 8 |
                            static_cast<uint16_t>(b[1]);
-            return std::make_pair(r, buf + sizeof(uint16_t));
+            return std::make_pair(r, b.consume());
         }
 
-        mutable_buffer_t put_uint32(boost::asio::mutable_buffer buf, uint32_t val) {
-            auto b = boost::asio::buffer_cast<octet_t*>(buf);
+        mutable_buffer_t put_uint32(at_least_mutable_buffer<sizeof(uint32_t)> b,
+                                    uint32_t val) {
             b[0] = static_cast<octet_t>(((val) >> 24) & 0xff);
             b[1] = static_cast<octet_t>(((val) >> 16) & 0xff);
             b[2] = static_cast<octet_t>(((val) >> 8) & 0xff);
             b[3] = static_cast<octet_t>(val & 0xff);
-            return buf + sizeof(val);
+            return b.consume();
         }
 
-        result_t<uint32_t> get_uint32(boost::asio::const_buffer buf) {
-            BOOST_ASSERT(boost::asio::buffer_size(buf) >= sizeof(uint32_t));
-
-            auto b = boost::asio::buffer_cast<octet_t const*>(buf);
+        result_t<uint32_t> get_uint32(at_least_const_buffer<sizeof(uint32_t)> b) {
             auto const r = static_cast<uint32_t>(b[0]) << 24 |
                            static_cast<uint32_t>(b[1]) << 16 |
                            static_cast<uint32_t>(b[2]) << 8  |
                            static_cast<uint32_t>(b[3]);
-            return std::make_pair(r, buf + sizeof(uint32_t));
+            return std::make_pair(r, b.consume());
         }
 
-        mutable_buffer_t put_uint64(boost::asio::mutable_buffer buf, uint64_t val) {
-            auto b = boost::asio::buffer_cast<octet_t*>(buf);
+        mutable_buffer_t put_uint64(at_least_mutable_buffer<sizeof(uint64_t)> b,
+                                    uint64_t val) {
             b[0] = static_cast<octet_t>(((val) >> 56) & 0xff);
             b[1] = static_cast<octet_t>(((val) >> 48) & 0xff);
             b[2] = static_cast<octet_t>(((val) >> 40) & 0xff);
@@ -119,13 +168,10 @@ namespace  azmqn::detail::transport {
             b[5] = static_cast<octet_t>(((val) >> 16) & 0xff);
             b[6] = static_cast<octet_t>(((val) >> 8) & 0xff);
             b[7] = static_cast<octet_t>(val & 0xff);
-            return buf + sizeof(val);
+            return b.consume();
         }
 
-        result_t<uint64_t> get_uint64(boost::asio::const_buffer buf) {
-            BOOST_ASSERT(boost::asio::buffer_size(buf) >= sizeof(uint64_t));
-
-            auto b = boost::asio::buffer_cast<octet_t const*>(buf);
+        result_t<uint64_t> get_uint64(at_least_const_buffer<sizeof(uint64_t)> b) {
             auto const r = static_cast<uint64_t>(b[0]) << 56 |
                            static_cast<uint64_t>(b[1]) << 48 |
                            static_cast<uint64_t>(b[2]) << 40 |
@@ -134,9 +180,8 @@ namespace  azmqn::detail::transport {
                            static_cast<uint64_t>(b[5]) << 16 |
                            static_cast<uint64_t>(b[6]) << 8  |
                            static_cast<uint64_t>(b[7]);
-            return std::make_pair(r, buf + sizeof(uint64_t));
+            return std::make_pair(r, b.consume());
         }
-
     } // namespace wire
 } // namespace namespace azmqn::detail::transport
 #endif // AZMQN_DETAIL_WIRE_HPP
