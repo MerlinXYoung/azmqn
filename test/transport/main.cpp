@@ -19,34 +19,34 @@ using namespace azmqn::detail::transport;
 
 TEST_CASE("Round Trip uint8_t", "[wire]") {
     std::array<octet_t, 1> b{ 0 };
-    wire::put_uint8(asio::buffer(b), 42);
+    wire::put<uint8_t>(asio::buffer(b), 42);
     REQUIRE(b[0] == 42);
 
-    const auto [r, _] = wire::get_uint8(asio::buffer(b));
+    const auto [r, _] = wire::get<uint8_t>(asio::buffer(b));
     REQUIRE(r == 42);
 }
 
 TEST_CASE("Round Trip uint16_t", "[wire]") {
     std::array<octet_t, sizeof(uint16_t)> b{ 0, 0 };
-    wire::put_uint16(boost::asio::buffer(b), 0xabba);
+    wire::put<uint16_t>(boost::asio::buffer(b), 0xabba);
     REQUIRE(*reinterpret_cast<uint16_t const*>(b.data()) == 0xbaab);
-    const auto [r, _] = wire::get_uint16(asio::buffer(b));
+    const auto [r, _] = wire::get<uint16_t>(asio::buffer(b));
     REQUIRE(r == 0xabba);
 }
 
 TEST_CASE("Round Trip uint32_t", "[wire]") {
     std::array<octet_t, sizeof(uint32_t)> b{ 0, 0, 0, 0 };
-    wire::put_uint32(boost::asio::buffer(b), 0xabcdef01);
+    wire::put<uint32_t>(boost::asio::buffer(b), 0xabcdef01);
     REQUIRE(*reinterpret_cast<uint32_t const*>(b.data()) == 0x01efcdab);
-    const auto [r, _] = wire::get_uint32(asio::buffer(b));
+    const auto [r, _] = wire::get<uint32_t>(asio::buffer(b));
     REQUIRE(r == 0xabcdef01);
 }
 
 TEST_CASE("Round Trip uint64_t", "[wire]") {
     std::array<octet_t, sizeof(uint64_t)> b{ 0, 0, 0, 0 };
-    wire::put_uint64(boost::asio::buffer(b), 0xabcdef0102030405);
+    wire::put<uint64_t>(boost::asio::buffer(b), 0xabcdef0102030405);
     REQUIRE(*reinterpret_cast<uint64_t const*>(b.data()) == 0x0504030201efcdab);
-    const auto [r, _] = wire::get_uint64(asio::buffer(b));
+    const auto [r, _] = wire::get<uint64_t>(asio::buffer(b));
     REQUIRE(r == 0xabcdef0102030405);
 }
 
@@ -103,7 +103,7 @@ TEST_CASE("read long frame", "[frames]") {
     sync_read_stream s;
     std::array<octet_t, 512 + wire::max_framing_octets> b{ 0x02, 0};
     auto buf = asio::buffer(b) + sizeof(octet_t);
-    wire::put_uint64(buf, b.size() - wire::max_framing_octets);
+    wire::put<uint64_t>(buf, b.size() - wire::max_framing_octets);
 
     std::fill(b.begin() + wire::max_framing_octets, b.end(), 'o');
     s.reset(asio::const_buffers_1{boost::asio::buffer(b)});

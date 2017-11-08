@@ -46,8 +46,8 @@ namespace  azmqn::detail::transport {
             mutable_buffer_t set_frame_size(at_least_mutable_buffer<sizeof(max_framing_octets)> b) const {
                 b.front() = tag_type::value | get_flags() | is_long();
                 auto bb = b.consume();
-                return is_long() ? put_uint64(bb, buf.size())
-                                 : put_uint8(bb, buf.size());
+                return is_long() ? put<uint64_t>(bb, buf.size())
+                                 : put<uint8_t>(bb, buf.size());
             }
 
         private:

@@ -7,6 +7,8 @@
 #include <boost/utility/string_view.hpp>
 #include <boost/range/algorithm/find_if.hpp>
 
+#include <memory>
+
 namespace azmqn::detail::transport {
     struct metadata 
         : std::enable_shared_from_this<metadata> {
@@ -37,12 +39,12 @@ namespace azmqn::detail::transport {
             props_vec_t res;
             while (boost::asio::buffer_size(buf)) {
                 uint8_t name_len;
-                std::tie(name_len, buf) = wire::get_uint8(buf);
+                std::tie(name_len, buf) = wire::get<uint8_t>(buf);
                 boost::string_view name(boost::asio::buffer_cast<char const*>(buf), name_len);
                 buf = buf + name_len;
 
                 uint32_t prop_len;
-                std::tie(prop_len, buf) = wire::get_uint32(buf);
+                std::tie(prop_len, buf) = wire::get<uint32_t>(buf);
                 auto const value = boost::asio::buffer_cast<octet_t const*>(buf);
                 res.push_back(prop{name, boost::asio::buffer(value, prop_len)});
                 buf = buf + prop_len;

@@ -3,7 +3,7 @@ project(azmqn)
 
 set(CMAKE_CXX_STANDARD 17)
 
-find_package(Boost 1.64 COMPONENTS system log date_time thread chrono regex random REQUIRED)
+find_package(Boost 1.63 COMPONENTS system thread REQUIRED)
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)

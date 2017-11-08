@@ -105,7 +105,7 @@ namespace  azmqn::detail::transport {
         size_t bytes_transferred_ = 0;
         result_t res_;
 
-        static constexpr struct ref_only_t { } ref_only;
+        static constexpr struct ref_only_t { } ref_only{};
 
         template<typename BufferBase>
         framing(BufferBase const& b, ref_only_t)
@@ -159,10 +159,10 @@ namespace  azmqn::detail::transport {
             BOOST_ASSERT(valid());
             size_t len;
             if (is_long()) {
-                std::tie(len, std::ignore) = wire::get_uint64(
+                std::tie(len, std::ignore) = wire::get<uint64_t>(
                         boost::asio::buffer(&framing_[1], sizeof(uint64_t)));
             } else {
-                std::tie(len, std::ignore) = wire::get_uint8(
+                std::tie(len, std::ignore) = wire::get<uint8_t>(
                         boost::asio::buffer(&framing_[1], sizeof(uint8_t)));
             }
             return len;
