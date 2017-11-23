@@ -1,9 +1,19 @@
 cmake_minimum_required(VERSION 3.9)
 project(azmqn)
 
+# use ccache if present
+find_program(CCACHE_FOUND ccache)
+if (CCACHE_FOUND)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 
-find_package(Boost 1.63 COMPONENTS system thread REQUIRED)
+include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+conan_basic_setup()
+
+#find_package(Boost 1.65.1 COMPONENTS system thread REQUIRED)
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
@@ -12,7 +22,7 @@ if (NOT CMAKE_THREAD_LIBS_INIT)
     set(CMAKE_THREAD_LIBS_INIT "")
 endif()
 
-include_directories(${Boost_INCLUDE_DIRS}
+include_directories(${CONAN_INCLUDE_DIRS}
                     ${PROJECT_SOURCE_DIR})
 
 enable_testing()

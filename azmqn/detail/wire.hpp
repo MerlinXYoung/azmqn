@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2013-2017`Contributors as noted in the AUTHORS file
+    Copyright (c) 2013-2017 Contributors as noted in the AUTHORS file
 
     This file is part of azmq
 
@@ -9,172 +9,88 @@
 #ifndef AZMQN_DETAIL_WIRE_HPP
 #define AZMQN_DETAIL_WIRE_HPP
 
+#include "buffer.hpp"
+
 #include <boost/assert.hpp>
-#include <boost/asio/buffer.hpp>
-#include <boost/container/small_vector.hpp>
+#include <boost/utility/string_view.hpp>
+#include <boost/endian/buffers.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/range/iterator_range_core.hpp>
+#include <boost/range/algorithm/copy.hpp>
+#include <boost/range/algorithm/fill.hpp>
+#include <boost/range/algorithm/mismatch.hpp>
 
 #include <cstddef>
+#include <cstring>
 #include <utility>
 #include <array>
 #include <limits>
+#include <type_traits>
 
 namespace  azmqn::detail::transport {
-    using octet_t = unsigned char; // TODO std::byte
-
-    namespace codec {
-        template<typename T>
-        constexpr void put(octet_t*, T);
-
-        template<>
-        constexpr void put<uint8_t>(octet_t* b, uint8_t val) { b[0] = val; }
-
-        template<>
-        constexpr void put<uint16_t>(octet_t* b, uint16_t val) {
-            b[0] = static_cast<octet_t>(((val) >> 8) & 0xff);
-            b[1] = static_cast<octet_t>(val & 0xff);
-        }
-
-        template<>
-        constexpr void put<uint32_t>(octet_t* b, uint32_t val) {
-            b[0] = static_cast<octet_t>(((val) >> 24) & 0xff);
-            b[1] = static_cast<octet_t>(((val) >> 16) & 0xff);
-            b[2] = static_cast<octet_t>(((val) >> 8) & 0xff);
-            b[3] = static_cast<octet_t>(val & 0xff);
-        }
-
-        template<>
-        constexpr void put<uint64_t>(octet_t* b, uint64_t val) {
-            b[0] = static_cast<octet_t>(((val) >> 56) & 0xff);
-            b[1] = static_cast<octet_t>(((val) >> 48) & 0xff);
-            b[2] = static_cast<octet_t>(((val) >> 40) & 0xff);
-            b[3] = static_cast<octet_t>(((val) >> 32) & 0xff);
-            b[4] = static_cast<octet_t>(((val) >> 24) & 0xff);
-            b[5] = static_cast<octet_t>(((val) >> 16) & 0xff);
-            b[6] = static_cast<octet_t>(((val) >> 8) & 0xff);
-            b[7] = static_cast<octet_t>(val & 0xff);
-        }
-
-        template<typename T>
-        constexpr T get(octet_t const*);
-
-        template<>
-        constexpr uint8_t get(octet_t const* b) { return *b; }
-
-        template<>
-        constexpr uint16_t get<uint16_t>(octet_t const* b) {
-            return static_cast<uint16_t>(b[0]) << 8 |
-                   static_cast<uint16_t>(b[1]);
-        }
-
-        template<>
-        constexpr uint32_t get<uint32_t>(octet_t const* b) {
-            return static_cast<uint32_t>(b[0]) << 24 |
-                   static_cast<uint32_t>(b[1]) << 16 |
-                   static_cast<uint32_t>(b[2]) << 8  |
-                   static_cast<uint32_t>(b[3]);
-        }
-
-        template<>
-        constexpr uint64_t get<uint64_t>(octet_t const* b) {
-            return static_cast<uint64_t>(b[0]) << 56 |
-                   static_cast<uint64_t>(b[1]) << 48 |
-                   static_cast<uint64_t>(b[2]) << 40 |
-                   static_cast<uint64_t>(b[3]) << 32 |
-                   static_cast<uint64_t>(b[4]) << 24 |
-                   static_cast<uint64_t>(b[5]) << 16 |
-                   static_cast<uint64_t>(b[6]) << 8  |
-                   static_cast<uint64_t>(b[7]);
-        }
-
-        constexpr bool const_expr_check() {
-            std::array<octet_t, sizeof(uint64_t)> buf{ 0, 0, 0, 0, 0, 0, 0, 0};
-            auto v1 = 12345678ul;
-            put(buf.data(), v1);
-            auto v2 = get<decltype(v1)>(buf.data());
-            return true;
-        }
-        static_assert(const_expr_check());
-    } // namespace codec 
-
-    using mutable_buffer_t = boost::asio::mutable_buffer;
-    using mutable_buffers_1_t = boost::asio::mutable_buffers_1;
-    using const_buffer_t = boost::asio::const_buffer;
-    using const_buffers_1_t = boost::asio::const_buffers_1;
-
-    template<typename Buffer, size_t min_size>
-    struct at_least_buffer {
-        at_least_buffer(Buffer b) : b_(b)
-        { BOOST_ASSERT(boost::asio::buffer_size(b) >= min_size); }
-
-        at_least_buffer(mutable_buffers_1_t b) : b_{ *std::begin(b) }
-        { }
-
-        at_least_buffer(const_buffers_1_t b) : b_{ *std::begin(b) }
-        { }
-
-        Buffer& operator*() { return b_; }
-        Buffer const& operator*() const { return b_; }
-
-        octet_t const* data() const
-        { return boost::asio::buffer_cast<octet_t const*>(b_); }
-
-        octet_t const& front() { return *data(); }
-
-        octet_t const& operator[](unsigned i) const
-        {
-            BOOST_ASSERT(i < boost::asio::buffer_size(b_));
-            return data()[i];
-        }
-
-        Buffer consume() const
-        { return b_ + min_size; }
-
-    protected:
-        Buffer b_;
-    };
-
-    template<size_t min_size>
-    struct at_least_mutable_buffer : at_least_buffer<mutable_buffer_t, min_size> {
-        using base_type = at_least_buffer<mutable_buffer_t, min_size>;
-        using base_type::base_type;
-
-        octet_t* data()
-        { return boost::asio::buffer_cast<octet_t*>(base_type::b_); }
-
-        octet_t& front() {  return *data(); }
-
-        octet_t& operator[](unsigned i) {
-            BOOST_ASSERT(i < boost::asio::buffer_size(base_type::b_));
-            return data()[i];
-        }
-    };
-
-    template<size_t min_size>
-    struct at_least_const_buffer : at_least_buffer<const_buffer_t, min_size> {
-        using base_type = at_least_buffer<const_buffer_t, min_size>;
-        using base_type::base_type;
-    };
-
     namespace wire {
-        constexpr auto small_size = 64;
-        constexpr auto max_small_size = std::numeric_limits<octet_t>::max();
-        constexpr auto min_framing_octets = 1 + sizeof(octet_t);
-        constexpr auto max_framing_octets = 1 + sizeof(uint64_t);
+        constexpr auto max_mechanism_size = 20ul;
 
-        static_assert(small_size > max_framing_octets);
-        static_assert(min_framing_octets > sizeof(octet_t));
-        static_assert(max_framing_octets > sizeof(uint64_t));
+        struct greeting {
+            static constexpr auto size = 64;
 
-        using buffer_t = boost::container::small_vector<octet_t, small_size>;
-        const_buffer_t buffer(buffer_t const& buf) {
-            return boost::asio::buffer(buf.data(), buf.size());
-        }
+            greeting(boost::string_view mechanism, bool as_server,
+                        octet_t vmajor = 0x03, octet_t vminor = 0x01) noexcept {
+                auto it = boost::copy(signature, std::begin(buf_));
+                *it++ = vmajor;
+                *it++ = vminor;
 
-        mutable_buffer_t buffer(buffer_t& buf) {
-            return boost::asio::buffer(buf.data(), buf.size());
-        }
+                BOOST_ASSERT(mechanism.size() < max_mechanism_size);
+                it = boost::copy(mechanism, it);
 
-        using framing_t = std::array<octet_t, max_framing_octets>;
+                it = std::fill_n(it, max_mechanism_size - mechanism.size(), 0);
+                *it++ = as_server ?  0x1 : 0x0;
+                boost::fill(boost::make_iterator_range(it, std::end(buf_)), 0);
+            }
+
+            greeting(const_buffer_t buf) noexcept {
+                auto const it = buffer_data(buf);
+                std::copy(it, it + size, std::begin(buf_));
+            }
+
+            const_buffer_t buffer() const { return boost::asio::buffer(buf_); }
+
+            bool valid() const {
+                auto [f, _] = boost::range::mismatch(signature, buf_);
+                return f == std::end(signature);
+            }
+
+            using version_t = std::pair<octet_t, octet_t>;
+            version_t version() const {
+                BOOST_ASSERT(valid());
+                auto const it = std::begin(buf_) + signature.size();
+                return std::make_pair(*it, *(it + 1));
+            }
+
+            boost::string_view mechanism() const {
+                auto const it = std::begin(buf_) + signature.size() + 2;
+                auto const c = reinterpret_cast<char const*>(&*it);
+                auto len = std::min(::strlen(c), max_mechanism_size); 
+                return boost::string_view(c, len);
+            }
+
+            bool is_server() const {
+                auto const it = std::begin(buf_) + signature.size() + 2 + max_mechanism_size;
+                return *it == 0x1;
+            }
+
+            friend std::ostream& operator<<(std::ostream& stm, greeting const& that) {
+                return stm << that.buffer();
+            }
+
+        private:
+            static constexpr auto signature_size = 10;
+            static constexpr auto filler_size = 31;
+            static constexpr std::array<octet_t, signature_size> signature =
+                { 0xff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x7f };
+
+            std::array<octet_t, size> buf_;
+        };
 
         enum class flags : octet_t {
             is_message = 0x0,
@@ -183,26 +99,173 @@ namespace  azmqn::detail::transport {
             is_command = 0x4,
             none = 0x0
         };
-        constexpr octet_t operator+(flags f) { return static_cast<octet_t>(f); }
-        constexpr bool is_set(octet_t o, flags f) { return o & +f; }
 
-        constexpr static bool is_more(octet_t o) { return is_set(o, flags::is_more); }
-        constexpr static bool is_long(octet_t o) { return is_set(o, flags::is_long); }
-        constexpr static bool is_command(octet_t o) { return is_set(o, flags::is_command); }
+        constexpr octet_t operator+(flags f) noexcept
+        { return static_cast<octet_t>(f); }
 
+        constexpr bool is_set(octet_t o, flags f) noexcept
+        { return o & +f; }
+
+        constexpr static bool is_more(octet_t o) noexcept
+        { return is_set(o, flags::is_more); }
+
+        constexpr static bool is_long(octet_t o) noexcept
+        { return is_set(o, flags::is_long); }
+
+        constexpr static bool is_command(octet_t o) noexcept
+        { return is_set(o, flags::is_command); }
+
+        // ZMTP uses network byte order
         template<typename T>
-        using result_t = std::pair<T, const_buffer_t>;
+        using endian_buffer_t = boost::endian::endian_buffer<
+                                      boost::endian::order::big
+                                    , T
+                                    , sizeof(T) * CHAR_BIT>;
 
+        // ZMTP only defines byte order for unsigned types
         template<typename T>
-        mutable_buffer_t put(at_least_mutable_buffer<sizeof(T)> b, T val) {
-            codec::put(b.data(), val);
+        auto put(at_least_mutable_buffer<sizeof(T)> b, T val) noexcept
+            -> typename std::enable_if<std::is_unsigned<T>::value, mutable_buffer_t>::type {
+            auto eb = reinterpret_cast<endian_buffer_t<T>*>(b.data());
+            *eb = val;
             return b.consume();
         }
 
         template<typename T>
-        result_t<T> get(at_least_const_buffer<sizeof(T)> b) {
-            return std::make_pair(codec::get<T>(b.data()), b.consume());
+        using result_t = std::pair<T, const_buffer_t>;
+
+        // ZMTP only defines byte order for unsigned types
+        template<typename T>
+        auto get(at_least_const_buffer<sizeof(T)> b) noexcept
+            -> typename std::enable_if<std::is_unsigned<T>::value, result_t<T>>::type {
+            auto eb = reinterpret_cast<endian_buffer_t<T> const*>(b.data());
+            return std::make_pair(eb->value(), b.consume());
         }
+
+        constexpr auto min_framing_octets = 1 + sizeof(octet_t);
+        constexpr auto max_framing_octets = 1 + sizeof(uint64_t);
+
+        static_assert(min_framing_octets > sizeof(octet_t));
+        static_assert(max_framing_octets > sizeof(uint64_t));
+
+        constexpr auto small_size = 64;
+        constexpr auto max_small_size = std::numeric_limits<octet_t>::max();
+        using buffer_t = backed_buffer<small_size>;
+
+        struct frame {
+            using framing_t = std::array<octet_t, max_framing_octets>;
+
+            frame()
+            { framing_[0] = 0; }
+
+            size_t bytes_transferred() const noexcept { return bytes_transferred_; }
+
+            bool empty() const noexcept { return bytes_transferred_ == 0; }
+
+            mutable_buffer_t mutable_buffer() noexcept {
+                return boost::asio::buffer(framing_);
+            }
+
+            const_buffer_t const_buffer() const noexcept {
+                BOOST_ASSERT(!empty());
+                return boost::asio::buffer(framing_.data(), is_long()
+                            ? max_framing_octets
+                            : min_framing_octets);
+            }
+
+            bool is_long() const noexcept {
+                BOOST_ASSERT(!empty());
+                return wire::is_long(framing_[0]);
+            }
+
+            bool valid() const noexcept {
+                if (empty()) {
+                    return false;
+                }
+
+                if (is_long() && bytes_transferred_ < wire::max_framing_octets) {
+                    return false;
+                }
+
+                return true;
+            }
+
+            bool is_more() const noexcept {
+                BOOST_ASSERT(!empty());
+                return wire::is_more(framing_[0]);
+            }
+
+            bool is_command() const noexcept {
+                BOOST_ASSERT(!empty());
+                return wire::is_command(framing_[0]);
+            }
+
+            size_t size() const noexcept {
+                BOOST_ASSERT(valid());
+                size_t len;
+                if (is_long()) {
+                    std::tie(len, std::ignore) = wire::get<uint64_t>(
+                            boost::asio::buffer(&framing_[1], sizeof(uint64_t)));
+                } else {
+                    std::tie(len, std::ignore) = wire::get<uint8_t>(
+                            boost::asio::buffer(&framing_[1], sizeof(uint8_t)));
+                }
+                return len;
+            }
+
+            template<typename SyncReadStream>
+            boost::system::error_code read(SyncReadStream& s,
+                                           boost::system::error_code& ec) {
+                using namespace boost;
+                BOOST_ASSERT(empty());
+                bytes_transferred_ = asio::read(s, asio::buffer(framing_.data(), min_framing_octets), ec);
+                if (ec) {
+                    return ec;
+                }
+
+                if (is_long()) {
+                    ec = read_until_long_framed(s, ec);
+                }
+                return ec;
+            }
+
+            template<typename AsyncReadStream,
+                 typename CompletionHandler>
+            void async_read(AsyncReadStream& s, CompletionHandler handler) {
+                using namespace boost;
+                BOOST_ASSERT(empty());
+
+                asio::async_read(s, asio::buffer(framing_.data(), min_framing_octets),
+                                 [&, handler{ std::move(handler) }](auto const& ec, size_t bytes_transferred) {
+                                        if(ec) {
+                                            handler(ec, 0);
+                                            return;
+                                        }
+
+                                        bytes_transferred_ = bytes_transferred;
+                                        if (is_long()) {
+                                            system::error_code iec;
+                                            read_until_long_framed(s, iec);
+                                            handler(iec, bytes_transferred_);
+                                        } else {
+                                            handler(ec, bytes_transferred_);
+                                        }
+                                    });
+            }
+
+        private:
+            framing_t framing_;
+            size_t bytes_transferred_ = 0;
+
+            template<typename SyncReadStream>
+            boost::system::error_code read_until_long_framed(SyncReadStream& s,
+                                                             boost::system::error_code& ec) {
+                using namespace boost;
+                static const auto long_size = max_framing_octets - min_framing_octets;
+                bytes_transferred_ += asio::read(s, asio::buffer(&framing_[min_framing_octets], long_size), ec);
+                return ec;
+            }
+        };
     } // namespace wire
 } // namespace namespace azmqn::detail::transport
 #endif // AZMQN_DETAIL_WIRE_HPP
