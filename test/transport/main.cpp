@@ -1,3 +1,5 @@
+#include <azmqn/utility/expected.hpp>
+
 #include <azmqn/detail/wire.hpp>
 #include <azmqn/detail/framed_io.hpp>
 #include <azmqn/detail/mechanism_catalog.hpp>
