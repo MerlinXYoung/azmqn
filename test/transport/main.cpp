@@ -23,7 +23,7 @@ namespace range = boost::range;
 TEST_CASE("Signature Round Trip", "[wire]") {
     using namespace azmqn::detail::transport;
 
-    boost::string_view mechanism("NULL");
+    wire::mechanism_name mechanism("NULL");
     wire::greeting g{ mechanism, true };
     REQUIRE(g.valid());
     {

@@ -32,13 +32,31 @@
 
 namespace  azmqn::detail::transport {
     namespace wire {
-        constexpr auto max_mechanism_size = 20ul;
+        struct mechanism_name {
+            static constexpr auto max_size = 20ul;
+
+            mechanism_name(boost::string_view val) noexcept
+                : val_{ val }
+            { BOOST_ASSERT(val_.size() <= max_size); }
+
+            boost::string_view value() const { return val_; }
+            size_t filler() const { return max_size - val_.size(); }
+
+            bool operator==(mechanism_name const& lhs) const { return val_ == lhs.val_; }
+            bool operator<(mechanism_name const& lhs) const { return val_ < lhs.val_; }
+            bool operator>(mechanism_name const& lhs) const { return val_ > lhs.val_; }
+            bool operator<=(mechanism_name const& lhs) const { return val_ <= lhs.val_; }
+            bool operator>=(mechanism_name const& lhs) const { return val_ >= lhs.val_; }
+            bool operator!=(mechanism_name const& lhs) const { return val_ != lhs.val_; }
+        private:
+            boost::string_view val_;
+        };
 
         struct greeting {
             static constexpr auto size = 64;
             using version_t = std::underlying_type_t<octet_t>;
 
-            greeting(boost::string_view mechanism, bool as_server,
+            greeting(mechanism_name mechanism, bool as_server,
                          version_t vmajor = 0x03, version_t vminor = 0x01) noexcept {
                 static constexpr auto tfn = [](auto x) { return octet_t(x); };
                 auto it = boost::copy(signature | boost::adaptors::transformed(tfn),
@@ -46,11 +64,11 @@ namespace  azmqn::detail::transport {
                 *it++ = octet_t(vmajor);
                 *it++ = octet_t(vminor);
 
-                BOOST_ASSERT(mechanism.size() < max_mechanism_size);
-                it = boost::copy(mechanism | boost::adaptors::transformed(tfn),
+                it = boost::copy(mechanism.value() | boost::adaptors::transformed(tfn),
                                  it);
 
-                it = std::fill_n(it, max_mechanism_size - mechanism.size(), octet_t(0));
+                it = std::fill_n(it, mechanism.filler(), octet_t(0));
+
                 *it++ = octet_t(as_server ?  0x1 : 0x0);
                 boost::fill(boost::make_iterator_range(it, std::end(buf_)), octet_t(0));
             }
@@ -77,15 +95,15 @@ namespace  azmqn::detail::transport {
                 return std::make_pair(static_cast<version_t>(*it), static_cast<version_t>(*(it + 1)));
             }
 
-            boost::string_view mechanism() const {
+            mechanism_name mechanism() const {
                 auto const it = std::begin(buf_) + signature.size() + 2;
                 auto const c = reinterpret_cast<char const*>(&*it);
-                auto len = std::min(::strlen(c), max_mechanism_size); 
+                auto len = std::min(::strlen(c), mechanism_name::max_size);
                 return boost::string_view(c, len);
             }
 
             bool is_server() const {
-                auto const it = std::begin(buf_) + signature.size() + 2 + max_mechanism_size;
+                auto const it = std::begin(buf_) + signature.size() + 2 + mechanism_name::max_size;
                 return *it == octet_t(0x1);
             }
 
