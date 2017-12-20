@@ -10,11 +10,12 @@
 #define AZMQN_DETAIL_WIRE_HPP
 
 #include "buffer.hpp"
+#include "../asio/read.hpp"
 
 #include <boost/assert.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/endian/buffers.hpp>
-#include <boost/asio/read.hpp>
+#include <boost/system/error_code.hpp>
 #include <boost/range/iterator_range_core.hpp>
 #include <boost/range/algorithm/copy.hpp>
 #include <boost/range/algorithm/fill.hpp>
@@ -26,6 +27,7 @@
 #include <array>
 #include <limits>
 #include <type_traits>
+#include <algorithm>
 
 namespace  azmqn::detail::transport {
     namespace wire {
@@ -214,19 +216,16 @@ namespace  azmqn::detail::transport {
             }
 
             template<typename SyncReadStream>
-            boost::system::error_code read(SyncReadStream& s,
-                                           boost::system::error_code& ec) {
-                using namespace boost;
+            asio::read_result_type read(SyncReadStream& s) {
                 BOOST_ASSERT(empty());
-                bytes_transferred_ = asio::read(s, asio::buffer(framing_.data(), min_framing_octets), ec);
-                if (ec) {
-                    return ec;
+                auto rr = asio::read(s, boost::asio::buffer(framing_.data(), min_framing_octets));
+                if (rr) {
+                    bytes_transferred_ = *rr;
+                    if (is_long()) {
+                        rr = read_until_long_framed(s);
+                    }
                 }
-
-                if (is_long()) {
-                    ec = read_until_long_framed(s, ec);
-                }
-                return ec;
+                return rr;
             }
 
             template<typename AsyncReadStream,
@@ -235,21 +234,14 @@ namespace  azmqn::detail::transport {
                 using namespace boost;
                 BOOST_ASSERT(empty());
 
-                asio::async_read(s, asio::buffer(framing_.data(), min_framing_octets),
-                                 [&, handler{ std::move(handler) }](auto const& ec, size_t bytes_transferred) {
-                                        if(ec) {
-                                            handler(ec, 0);
-                                            return;
+                asio::async_read(s, boost::asio::buffer(framing_.data(), min_framing_octets),
+                                 [&, handler{ std::move(handler) }](asio::read_result_type rr) {
+                                        if(rr) {
+                                            bytes_transferred_ = *rr;
+                                            if (is_long())
+                                                rr = read_until_long_framed(s);
                                         }
-
-                                        bytes_transferred_ = bytes_transferred;
-                                        if (is_long()) {
-                                            system::error_code iec;
-                                            read_until_long_framed(s, iec);
-                                            handler(iec, bytes_transferred_);
-                                        } else {
-                                            handler(ec, bytes_transferred_);
-                                        }
+                                        handler(rr);
                                     });
             }
 
@@ -258,14 +250,37 @@ namespace  azmqn::detail::transport {
             size_t bytes_transferred_ = 0;
 
             template<typename SyncReadStream>
-            boost::system::error_code read_until_long_framed(SyncReadStream& s,
-                                                             boost::system::error_code& ec) {
+            asio::read_result_type read_until_long_framed(SyncReadStream& s) {
                 using namespace boost;
                 static const auto long_size = max_framing_octets - min_framing_octets;
-                bytes_transferred_ += asio::read(s, asio::buffer(&framing_[min_framing_octets], long_size), ec);
-                return ec;
+                auto res = asio::read(s, boost::asio::buffer(&framing_[min_framing_octets], long_size));
+                if (res) {
+                    bytes_transferred_ += *res;
+                    return bytes_transferred_;
+                }
+                return res;
             }
         };
+
+        struct read_limit {
+            constexpr static int32_t max() { return std::numeric_limits<int32_t>::max(); }
+            constexpr read_limit(int32_t val) noexcept
+                : val_{ std::clamp(val, 0, max()) }
+            { }
+
+            using result_t = utility::expected<void, boost::system::error_code>;
+            result_t check(frame const& f) const {
+                if (f.size() > val_) {
+                    using namespace boost::system;
+                    return utility::make_unexpected(make_error_code(errc::message_size));
+                }
+                return result_t();
+            }
+
+        private:
+            int32_t val_;
+        };
+
     } // namespace wire
 } // namespace namespace azmqn::detail::transport
 #endif // AZMQN_DETAIL_WIRE_HPP

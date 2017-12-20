@@ -539,6 +539,7 @@ public:
     { type(std::move(lhs)).swap(*this); return *this; }
 
     void swap(expected& other) {
+        using std::swap;
         if (base::has_ && other.has_) {
             swap(base::s_.val_, other.s_.val_);
         } else if (base::has_ && !other.has_) {
@@ -556,7 +557,7 @@ public:
             ::new (&base::s_.val_) value_type{ std::move(v) };
             swap(base::has_, other.has_);
         } else {
-            swap(base::s_.err_, other.s_.error_);
+            swap(base::s_.err_, other.s_.err_);
         }
     }
 
@@ -600,31 +601,31 @@ public:
     constexpr error_type const& error() const & {
         BOOST_ASSERT(!base::has_);
         return !base::has_ ? base::s_.err_
-                           : std::terminate(), base::s_.err_;
+                           : (std::terminate(), base::s_.err_);
     }
 
     constexpr error_type & error() & {
         BOOST_ASSERT(!base::has_);
         return !base::has_ ? base::s_.err_
-                           : std::terminate(), base::s_.err_;
+                           : (std::terminate(), base::s_.err_);
     }
 
     constexpr error_type const&& error() const && {
         BOOST_ASSERT(!base::has_);
         return !base::has_ ? base::s_.err_
-                           : std::terminate(), base::s_.err_;
+                           : (std::terminate(), base::s_.err_);
     }
 
     constexpr error_type && error() && {
         BOOST_ASSERT(!base::has_);
         return std::move(!base::has_ ? base::s_.err_
-                                     : std::terminate(), base::s_.err_);
+                                     : (std::terminate(), base::s_.err_));
     }
 
     constexpr unexpected<error_type> get_unexpected() const {
         BOOST_ASSERT(!base::has_);
         return unexpected<error_type>(!base::has_ ? base::s_.err_
-                                                  : std::terminate(), base::s_.err_);
+                                                  : (std::terminate(), base::s_.err_));
     }
 
     template<typename U>
@@ -715,31 +716,31 @@ public:
     constexpr error_type const& error() const & {
         BOOST_ASSERT(!base::has_);
         return !base::has_ ? base::s_.err_
-                           : std::terminate(), base::s_.err_;
+                           : (std::terminate(), base::s_.err_);
     }
 
     constexpr error_type & error() & {
         BOOST_ASSERT(!base::has_);
         return !base::has_ ? base::s_.err_
-                           : std::terminate(), base::s_.err_;
+                           : (std::terminate(), base::s_.err_);
     }
 
     constexpr error_type const&& error() const && {
         BOOST_ASSERT(!base::has_);
         return !base::has_ ? base::s_.err_
-                           : std::terminate(), base::s_.err_;
+                           : (std::terminate(), base::s_.err_);
     }
 
     constexpr error_type && error() && {
         BOOST_ASSERT(!base::has_);
         return std::move(!base::has_ ? base::s_.err_
-                                     : std::terminate(), base::s_.err_);
+                                     : (std::terminate(), base::s_.err_));
     }
 
     constexpr unexpected<error_type> get_unexpected() const {
         BOOST_ASSERT(!base::has_);
         return unexpected<error_type>(!base::has_ ? base::s_.err_
-                                                  : std::terminate(), base::s_.err_);
+                                                  : (std::terminate(), base::s_.err_));
     }
 };
 
@@ -886,6 +887,11 @@ template <typename T, typename E = expected_detail::nullopt_t>
 constexpr expected<std::decay_t<T>, E> make_expected(T&& v) {
     return expected<std::decay_t<T>, E>{ std::forward<T>(v) };
 }
+
+inline expected<void, std::nullopt_t> make_expected() {
+    return expected<void, std::nullopt_t>{ };
+}
+
 
 template <typename T, typename E>
 constexpr expected<T, std::decay_t<E>> make_expected_from_error(E&& e) {
