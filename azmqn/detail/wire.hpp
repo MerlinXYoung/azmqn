@@ -17,6 +17,7 @@
 #include <boost/endian/buffers.hpp>
 #include <boost/system/error_code.hpp>
 #include <boost/range/iterator_range_core.hpp>
+#include <boost/range/adaptor/transformed.hpp>
 #include <boost/range/algorithm/copy.hpp>
 #include <boost/range/algorithm/fill.hpp>
 #include <boost/range/algorithm/mismatch.hpp>
@@ -35,19 +36,23 @@ namespace  azmqn::detail::transport {
 
         struct greeting {
             static constexpr auto size = 64;
+            using version_t = std::underlying_type_t<octet_t>;
 
             greeting(boost::string_view mechanism, bool as_server,
-                        octet_t vmajor = 0x03, octet_t vminor = 0x01) noexcept {
-                auto it = boost::copy(signature, std::begin(buf_));
-                *it++ = vmajor;
-                *it++ = vminor;
+                         version_t vmajor = 0x03, version_t vminor = 0x01) noexcept {
+                static constexpr auto tfn = [](auto x) { return octet_t(x); };
+                auto it = boost::copy(signature | boost::adaptors::transformed(tfn),
+                                      std::begin(buf_));
+                *it++ = octet_t(vmajor);
+                *it++ = octet_t(vminor);
 
                 BOOST_ASSERT(mechanism.size() < max_mechanism_size);
-                it = boost::copy(mechanism, it);
+                it = boost::copy(mechanism | boost::adaptors::transformed(tfn),
+                                 it);
 
-                it = std::fill_n(it, max_mechanism_size - mechanism.size(), 0);
-                *it++ = as_server ?  0x1 : 0x0;
-                boost::fill(boost::make_iterator_range(it, std::end(buf_)), 0);
+                it = std::fill_n(it, max_mechanism_size - mechanism.size(), octet_t(0));
+                *it++ = octet_t(as_server ?  0x1 : 0x0);
+                boost::fill(boost::make_iterator_range(it, std::end(buf_)), octet_t(0));
             }
 
             greeting(const_buffer_t buf) noexcept {
@@ -58,15 +63,18 @@ namespace  azmqn::detail::transport {
             const_buffer_t buffer() const { return boost::asio::buffer(buf_); }
 
             bool valid() const {
-                auto [f, _] = boost::range::mismatch(signature, buf_);
-                return f == std::end(signature);
+                auto [r, _] = boost::range::mismatch(signature, buf_,
+                                    [](auto const& x, auto const& y) {
+                                        return octet_t(x) == y;
+                                    });
+                return r == std::end(signature);
             }
 
-            using version_t = std::pair<octet_t, octet_t>;
-            version_t version() const {
+            using version_result_t = std::pair<version_t, version_t>;
+            version_result_t version() const {
                 BOOST_ASSERT(valid());
                 auto const it = std::begin(buf_) + signature.size();
-                return std::make_pair(*it, *(it + 1));
+                return std::make_pair(static_cast<version_t>(*it), static_cast<version_t>(*(it + 1)));
             }
 
             boost::string_view mechanism() const {
@@ -78,7 +86,7 @@ namespace  azmqn::detail::transport {
 
             bool is_server() const {
                 auto const it = std::begin(buf_) + signature.size() + 2 + max_mechanism_size;
-                return *it == 0x1;
+                return *it == octet_t(0x1);
             }
 
             friend std::ostream& operator<<(std::ostream& stm, greeting const& that) {
@@ -88,13 +96,13 @@ namespace  azmqn::detail::transport {
         private:
             static constexpr auto signature_size = 10;
             static constexpr auto filler_size = 31;
-            static constexpr std::array<octet_t, signature_size> signature =
+            static constexpr std::array<std::underlying_type_t<octet_t>, signature_size> signature =
                 { 0xff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x7f };
 
             std::array<octet_t, size> buf_;
         };
 
-        enum class flags : octet_t {
+        enum class flags : std::underlying_type_t<octet_t> {
             is_message = 0x0,
             is_more = 0x1,
             is_long = 0x2,
@@ -103,10 +111,10 @@ namespace  azmqn::detail::transport {
         };
 
         constexpr octet_t operator+(flags f) noexcept
-        { return static_cast<octet_t>(f); }
+        { return octet_t(static_cast<std::underlying_type_t<flags>>(f)); }
 
         constexpr bool is_set(octet_t o, flags f) noexcept
-        { return o & +f; }
+        { return std::to_integer<bool>(o & +f); }
 
         constexpr static bool is_more(octet_t o) noexcept
         { return is_set(o, flags::is_more); }
@@ -151,14 +159,14 @@ namespace  azmqn::detail::transport {
         static_assert(max_framing_octets > sizeof(uint64_t));
 
         constexpr auto small_size = 64;
-        constexpr auto max_small_size = std::numeric_limits<octet_t>::max();
+        constexpr auto max_small_size = std::numeric_limits<std::underlying_type_t<octet_t>>::max();
         using buffer_t = backed_buffer<small_size>;
 
         struct frame {
             using framing_t = std::array<octet_t, max_framing_octets>;
 
             frame()
-            { framing_[0] = 0; }
+            { framing_[0] = octet_t(0); }
 
             size_t bytes_transferred() const noexcept { return bytes_transferred_; }
 

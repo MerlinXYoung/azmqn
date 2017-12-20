@@ -15,11 +15,10 @@
 
 #include <array>
 #include <algorithm>
-
 #include <ostream>
 
 namespace  azmqn::detail::transport {
-    using octet_t = unsigned char; // TODO std::byte
+    using octet_t = std::byte;
 
     using mutable_buffer_t = boost::asio::mutable_buffer;
     using mutable_buffers_1_t = boost::asio::mutable_buffers_1;
@@ -41,8 +40,8 @@ namespace  azmqn::detail::transport {
             auto sz = buffer_size(buf);
             do {
                 stm << sep
-                    << "0123456790abcdef"[*c / 16]
-                    << "0123456790abcdef"[*c % 16];
+                    << "0123456790abcdef"[std::to_integer<short>(*c) / 16]
+                    << "0123456790abcdef"[std::to_integer<short>(*c) % 16];
                 sep = " ";
                 ++c;
             } while (--sz);

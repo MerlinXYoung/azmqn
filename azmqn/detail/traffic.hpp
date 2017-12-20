@@ -28,15 +28,15 @@ namespace  azmqn::detail::transport {
             using buffer_t::buffer_t;
 
             mutable_buffer_t set_framing(at_least_mutable_buffer<sizeof(max_framing_octets)> b) const noexcept {
-                *b.data() = tag_type::value | get_flags() | is_long();
+                *b.data() = octet_t(tag_type::value) | get_flags() | is_long();
                 auto bb = b.consume();
-                return is_long() ? put<uint64_t>(bb, size())
-                                 : put<uint8_t>(bb, size());
+                return std::to_integer<bool>(is_long()) ? put<uint64_t>(bb, size())
+                                                        : put<uint8_t>(bb, size());
             }
 
         private:
             using flags_type = std::underlying_type<flags>::type;
-            using tag_type = std::integral_constant<flags_type, +selector>;
+            using tag_type = std::integral_constant<flags_type, static_cast<flags_type>(+selector)>;
 
             static constexpr auto has_flags = boost::hana::is_valid(
                                     [](auto&& x) -> decltype(x.get_flags()) { });

@@ -52,9 +52,11 @@ TEST_CASE("Signature Round Trip", "[wire]") {
 TEST_CASE("Round Trip uint8_t", "[wire]") {
     using namespace azmqn::detail::transport;
 
-    std::array<octet_t, 1> b{ 0 };
+    std::array<octet_t, 1> b;
+    b.fill(octet_t(0));
+
     wire::put<uint8_t>(asio::buffer(b), 42);
-    REQUIRE(b[0] == 42);
+    REQUIRE(b[0] == octet_t(42));
 
     const auto [r, _] = wire::get<uint8_t>(asio::buffer(b));
     REQUIRE(r == 42);
@@ -63,7 +65,9 @@ TEST_CASE("Round Trip uint8_t", "[wire]") {
 TEST_CASE("Round Trip uint16_t", "[wire]") {
     using namespace azmqn::detail::transport;
 
-    std::array<octet_t, sizeof(uint16_t)> b{ 0, 0 };
+    std::array<octet_t, sizeof(uint16_t)> b;
+    b.fill(octet_t(0));
+
     wire::put<uint16_t>(boost::asio::buffer(b), 0xabba);
     REQUIRE(*reinterpret_cast<uint16_t const*>(b.data()) == 0xbaab);
     const auto [r, _] = wire::get<uint16_t>(asio::buffer(b));
@@ -73,7 +77,9 @@ TEST_CASE("Round Trip uint16_t", "[wire]") {
 TEST_CASE("Round Trip uint32_t", "[wire]") {
     using namespace azmqn::detail::transport;
 
-    std::array<octet_t, sizeof(uint32_t)> b{ 0, 0, 0, 0 };
+    std::array<octet_t, sizeof(uint32_t)> b;
+    b.fill(octet_t(0));
+
     wire::put<uint32_t>(boost::asio::buffer(b), 0xabcdef01);
     REQUIRE(*reinterpret_cast<uint32_t const*>(b.data()) == 0x01efcdab);
     const auto [r, _] = wire::get<uint32_t>(asio::buffer(b));
@@ -83,7 +89,9 @@ TEST_CASE("Round Trip uint32_t", "[wire]") {
 TEST_CASE("Round Trip uint64_t", "[wire]") {
     using namespace azmqn::detail::transport;
 
-    std::array<octet_t, sizeof(uint64_t)> b{ 0, 0, 0, 0 };
+    std::array<octet_t, sizeof(uint64_t)> b;
+    b.fill(octet_t(0));
+
     wire::put<uint64_t>(boost::asio::buffer(b), 0xabcdef0102030405);
     REQUIRE(*reinterpret_cast<uint64_t const*>(b.data()) == 0x0504030201efcdab);
     const auto [r, _] = wire::get<uint64_t>(asio::buffer(b));
@@ -93,12 +101,14 @@ TEST_CASE("Round Trip uint64_t", "[wire]") {
 TEST_CASE("Static frame operations", "[frames]") {
     using namespace azmqn::detail::transport;
 
-    std::array<octet_t, 5> b{ 0x00, 0x03, 'f', 'o', 'o' };
+    std::array<octet_t, 5> b{ octet_t(0x00), octet_t(0x03),
+                              octet_t('f'), octet_t('o'), octet_t('o') };
     REQUIRE(!wire::is_more(b[0]));
     REQUIRE(!wire::is_long(b[0]));
     REQUIRE(!wire::is_command(b[0]));
 
-    std::array<octet_t, 5> c{ 0x06, 0x03, 'f', 'o', 'o' };
+    std::array<octet_t, 5> c{ octet_t(0x06), octet_t(0x03),
+                              octet_t('f'), octet_t('o'), octet_t('o') };
     REQUIRE(!wire::is_more(c[0]));
     REQUIRE(wire::is_long(c[0]));
     REQUIRE(wire::is_command(c[0]));
@@ -133,9 +143,11 @@ struct sync_read_stream {
 
 TEST_CASE("read short frame", "[frames]") {
     using namespace azmqn::detail;
+    using octet_t = transport::octet_t;
 
     sync_read_stream s;
-    std::array<transport::octet_t, 5> b{ 0x00, 0x03, 'f', 'o', 'o' };
+    std::array<octet_t, 5> b{ octet_t(0x00), octet_t(0x03),
+                              octet_t('f'), octet_t('o'), octet_t('o') };
     s.reset(asio::const_buffers_1{boost::asio::buffer(b)});
 
     auto res = transport::read(s, 1024);
@@ -144,13 +156,14 @@ TEST_CASE("read short frame", "[frames]") {
 
 TEST_CASE("read long frame", "[frames]") {
     using namespace azmqn::detail;
+    using octet_t = transport::octet_t;
 
     sync_read_stream s;
-    std::array<transport::octet_t, 512 + transport::wire::max_framing_octets> b{ 0x02, 0};
+    std::array<transport::octet_t, 512 + transport::wire::max_framing_octets> b{ octet_t(0x02), octet_t(0) };
     auto buf = asio::buffer(b) + sizeof(transport::octet_t);
     transport::wire::put<uint64_t>(buf, b.size() - transport::wire::max_framing_octets);
 
-    std::fill(b.begin() + transport::wire::max_framing_octets, b.end(), 'o');
+    std::fill(b.begin() + transport::wire::max_framing_octets, b.end(), octet_t('o'));
     s.reset(asio::const_buffers_1{boost::asio::buffer(b)});
 
     auto res = transport::read(s, 1024);
