@@ -54,23 +54,23 @@ namespace  azmqn::detail::transport {
 
         struct greeting {
             static constexpr auto size = 64;
-            using version_t = std::underlying_type_t<octet_t>;
+            using version_t = std::underlying_type_t<octet>;
 
             greeting(mechanism_name mechanism, bool as_server,
                          version_t vmajor = 0x03, version_t vminor = 0x01) noexcept {
-                static constexpr auto tfn = [](auto x) { return octet_t(x); };
+                static constexpr auto tfn = [](auto x) { return octet(x); };
                 auto it = boost::copy(signature | boost::adaptors::transformed(tfn),
                                       std::begin(buf_));
-                *it++ = octet_t(vmajor);
-                *it++ = octet_t(vminor);
+                *it++ = octet(vmajor);
+                *it++ = octet(vminor);
 
                 it = boost::copy(mechanism.value() | boost::adaptors::transformed(tfn),
                                  it);
 
-                it = std::fill_n(it, mechanism.filler(), octet_t(0));
+                it = std::fill_n(it, mechanism.filler(), octet(0));
 
-                *it++ = octet_t(as_server ?  0x1 : 0x0);
-                boost::fill(boost::make_iterator_range(it, std::end(buf_)), octet_t(0));
+                *it++ = octet(as_server ?  0x1 : 0x0);
+                boost::fill(boost::make_iterator_range(it, std::end(buf_)), octet(0));
             }
 
             greeting(const_buffer_t buf) noexcept {
@@ -83,7 +83,7 @@ namespace  azmqn::detail::transport {
             bool valid() const {
                 auto [r, _] = boost::range::mismatch(signature, buf_,
                                     [](auto const& x, auto const& y) {
-                                        return octet_t(x) == y;
+                                        return octet(x) == y;
                                     });
                 return r == std::end(signature);
             }
@@ -104,7 +104,7 @@ namespace  azmqn::detail::transport {
 
             bool is_server() const {
                 auto const it = std::begin(buf_) + signature.size() + 2 + mechanism_name::max_size;
-                return *it == octet_t(0x1);
+                return *it == octet(0x1);
             }
 
             friend std::ostream& operator<<(std::ostream& stm, greeting const& that) {
@@ -114,13 +114,13 @@ namespace  azmqn::detail::transport {
         private:
             static constexpr auto signature_size = 10;
             static constexpr auto filler_size = 31;
-            static constexpr std::array<std::underlying_type_t<octet_t>, signature_size> signature =
+            static constexpr std::array<std::underlying_type_t<octet>, signature_size> signature =
                 { 0xff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x7f };
 
-            std::array<octet_t, size> buf_;
+            std::array<octet, size> buf_;
         };
 
-        enum class flags : std::underlying_type_t<octet_t> {
+        enum class flags : std::underlying_type_t<octet> {
             is_message = 0x0,
             is_more = 0x1,
             is_long = 0x2,
@@ -128,19 +128,19 @@ namespace  azmqn::detail::transport {
             none = 0x0
         };
 
-        constexpr octet_t operator+(flags f) noexcept
-        { return octet_t(static_cast<std::underlying_type_t<flags>>(f)); }
+        constexpr octet operator+(flags f) noexcept
+        { return octet(static_cast<std::underlying_type_t<flags>>(f)); }
 
-        constexpr bool is_set(octet_t o, flags f) noexcept
-        { return std::to_integer<bool>(o & +f); }
+        constexpr bool is_set(octet o, flags f) noexcept
+        { return utility::to_integer<bool>(o & +f); }
 
-        constexpr static bool is_more(octet_t o) noexcept
+        constexpr static bool is_more(octet o) noexcept
         { return is_set(o, flags::is_more); }
 
-        constexpr static bool is_long(octet_t o) noexcept
+        constexpr static bool is_long(octet o) noexcept
         { return is_set(o, flags::is_long); }
 
-        constexpr static bool is_command(octet_t o) noexcept
+        constexpr static bool is_command(octet o) noexcept
         { return is_set(o, flags::is_command); }
 
         // ZMTP uses network byte order
@@ -170,21 +170,21 @@ namespace  azmqn::detail::transport {
             return std::make_pair(eb->value(), b.consume());
         }
 
-        constexpr auto min_framing_octets = 1 + sizeof(octet_t);
+        constexpr auto min_framing_octets = 1 + sizeof(octet);
         constexpr auto max_framing_octets = 1 + sizeof(uint64_t);
 
-        static_assert(min_framing_octets > sizeof(octet_t));
+        static_assert(min_framing_octets > sizeof(octet));
         static_assert(max_framing_octets > sizeof(uint64_t));
 
         constexpr auto small_size = 64;
-        constexpr auto max_small_size = std::numeric_limits<std::underlying_type_t<octet_t>>::max();
+        constexpr auto max_small_size = std::numeric_limits<std::underlying_type_t<octet>>::max();
         using buffer_t = backed_buffer<small_size>;
 
         struct frame {
-            using framing_t = std::array<octet_t, max_framing_octets>;
+            using framing_t = std::array<octet, max_framing_octets>;
 
             frame()
-            { framing_[0] = octet_t(0); }
+            { framing_[0] = octet(0); }
 
             size_t bytes_transferred() const noexcept { return bytes_transferred_; }
 

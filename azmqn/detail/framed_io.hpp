@@ -14,8 +14,7 @@
 #include "traffic.hpp"
 
 #include "../asio/read.hpp"
-
-#include <boost/asio/write.hpp>
+#include "../asio/write.hpp"
 
 #include <array>
 
@@ -42,16 +41,15 @@ namespace  azmqn::detail::transport {
     }
 
     template<typename SyncWriteStream>
-    size_t write(SyncWriteStream& s, wire::writable_message_or_command const& w,
-                        boost::system::error_code& ec) {
-        return boost::asio::write(s, w.buffer_sequence(), ec);
+    asio::write_result_type write(SyncWriteStream& s, wire::writable_message_or_command const& w) {
+        return asio::write(s, w.buffer_sequence());
     }
 
     // The readable_message_or_command argument must remain valid until the
     // completion handler is called.
     // Completion handler's signature is -
     //      void handler(message_or_command_result_type)
-    //                   
+    //
     template<typename AsyncReadStream,
              typename CompletionHandler>
     void async_read(AsyncReadStream& s, wire::readable_message_or_command& r,
@@ -80,15 +78,14 @@ namespace  azmqn::detail::transport {
     }
 
     // The writable_message_or_command argument must remain valid until the
-    // completion handler is called. Completion handler's signature is the same
-    // as for boost::asio::async_write()
+    // completion handler is called. Completion handler's signature is -
+    //      void handler(asio::write_result_type)
     template<typename AsyncWriteStream,
              typename CompletionHandler>
     void async_write(AsyncWriteStream& s, wire::writable_message_or_command const& w,
                         CompletionHandler&& handler) {
         BOOST_ASSERT(!w.empty());
-        boost::asio::async_write(s, w.buffer_sequence(),
-                                 std::forward<CompletionHandler>(handler));
+        asio::async_write(s, w.buffer_sequence(), std::forward<CompletionHandler>(handler));
     }
 } // namespace azmqn::detail::transport
 

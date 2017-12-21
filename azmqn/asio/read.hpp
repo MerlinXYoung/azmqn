@@ -18,7 +18,7 @@ namespace azmqn::asio {
 
     template<typename SyncReadStream,
              typename MutableBufferSequence>
-    read_result_type read(SyncReadStream & s, const MutableBufferSequence & buffers) {
+    read_result_type read(SyncReadStream & s, MutableBufferSequence const & buffers) {
         boost::system::error_code ec;
         auto res = boost::asio::read(s, buffers, ec);
         if (ec)
@@ -29,7 +29,7 @@ namespace azmqn::asio {
     template<typename AsyncReadStream,
              typename MutableBufferSequence,
              typename ReadHandler>
-    void async_read(AsyncReadStream & s, const MutableBufferSequence & buffers,
+    void async_read(AsyncReadStream & s, MutableBufferSequence const& buffers,
                         ReadHandler handler) {
         boost::asio::async_read(s, buffers,
                 [handler](boost::system::error_code& ec, size_t bytes_transferred) {

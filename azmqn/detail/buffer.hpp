@@ -9,6 +9,8 @@
 #ifndef AZMQN_DETAIL_BUFFER_HPP
 #define AZMQN_DETAIL_BUFFER_HPP
 
+#include "../utility/octet.hpp"
+
 #include <boost/assert.hpp>
 #include <boost/container/small_vector.hpp>
 #include <boost/asio/buffer.hpp>
@@ -18,15 +20,15 @@
 #include <ostream>
 
 namespace  azmqn::detail::transport {
-    using octet_t = std::byte;
+    using azmqn::utility::octet;
 
     using mutable_buffer_t = boost::asio::mutable_buffer;
     using mutable_buffers_1_t = boost::asio::mutable_buffers_1;
     using const_buffer_t = boost::asio::const_buffer;
     using const_buffers_1_t = boost::asio::const_buffers_1;
 
-    octet_t* buffer_data(mutable_buffer_t buf) noexcept { return boost::asio::buffer_cast<octet_t*>(buf); }
-    octet_t const* buffer_data(const_buffer_t buf) noexcept { return boost::asio::buffer_cast<octet_t const*>(buf); }
+    octet* buffer_data(mutable_buffer_t buf) noexcept { return boost::asio::buffer_cast<octet*>(buf); }
+    octet const* buffer_data(const_buffer_t buf) noexcept { return boost::asio::buffer_cast<octet const*>(buf); }
 
     template<typename T>
     size_t buffer_size(T buf) noexcept { return boost::asio::buffer_size(buf); }
@@ -36,15 +38,12 @@ namespace  azmqn::detail::transport {
         std::ostream& dump_buffer(std::ostream& stm, Buffer const& buf) {
             stm << "{ ";
             char const* sep = "";
-            auto c = buffer_data(buf);
-            auto sz = buffer_size(buf);
-            do {
-                stm << sep
-                    << "0123456790abcdef"[std::to_integer<short>(*c) / 16]
-                    << "0123456790abcdef"[std::to_integer<short>(*c) % 16];
+            auto begin = buffer_data(buf);
+            auto end = begin + buffer_size(buf);
+            for (; begin != end; ++begin) {
+                stm << sep << *begin;
                 sep = " ";
-                ++c;
-            } while (--sz);
+            }
             return stm << " }";
         }
     }
@@ -72,7 +71,7 @@ namespace  azmqn::detail::transport {
             : b_{ *std::begin(b) }
         { assert_precondition(); }
 
-        octet_t const* data() const noexcept { return buffer_data(b_); }
+        octet const* data() const noexcept { return buffer_data(b_); }
 
         Buffer consume() const noexcept
         { return b_ + min_size; }
@@ -89,7 +88,7 @@ namespace  azmqn::detail::transport {
         using base_type = at_least_buffer<mutable_buffer_t, min_size>;
         using base_type::base_type;
 
-        octet_t* data() noexcept { return buffer_data(base_type::b_); }
+        octet* data() noexcept { return buffer_data(base_type::b_); }
     };
 
     template<size_t min_size>
@@ -118,7 +117,7 @@ namespace  azmqn::detail::transport {
         { return boost::asio::buffer(v_.data(), size()); }
 
     private:
-        using backing_type = boost::container::small_vector<octet_t, small_size>;
+        using backing_type = boost::container::small_vector<octet, small_size>;
         backing_type v_;
 
     public:

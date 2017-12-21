@@ -28,10 +28,10 @@ namespace  azmqn::detail::transport {
             using buffer_t::buffer_t;
 
             mutable_buffer_t set_framing(at_least_mutable_buffer<sizeof(max_framing_octets)> b) const noexcept {
-                *b.data() = octet_t(tag_type::value) | get_flags() | is_long();
+                *b.data() = octet(tag_type::value) | get_flags() | is_long();
                 auto bb = b.consume();
-                return std::to_integer<bool>(is_long()) ? put<uint64_t>(bb, size())
-                                                        : put<uint8_t>(bb, size());
+                return utility::to_integer<bool>(is_long()) ? put<uint64_t>(bb, size())
+                                                            : put<uint8_t>(bb, size());
             }
 
         private:

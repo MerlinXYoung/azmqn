@@ -1,3 +1,5 @@
+#include <azmqn/utility/octet.hpp>
+
 #include <azmqn/asio/read.hpp>
 
 #include <azmqn/detail/wire.hpp>
@@ -7,6 +9,8 @@
 #include <boost/utility/string_view.hpp>
 #include <boost/range/algorithm/copy.hpp>
 #include <boost/range/algorithm/fill.hpp>
+#include <boost/range/algorithm/for_each.hpp>
+#include <boost/range/numeric.hpp>
 #include <boost/system/error_code.hpp>
 
 #include <array>
@@ -18,7 +22,6 @@
 
 namespace asio = boost::asio;
 namespace range = boost::range;
-
 
 TEST_CASE("Signature Round Trip", "[wire]") {
     using namespace azmqn::detail::transport;
@@ -34,7 +37,7 @@ TEST_CASE("Signature Round Trip", "[wire]") {
     REQUIRE(mechanism == g.mechanism());
     REQUIRE(g.is_server());
 
-    std::array<octet_t, wire::greeting::size> a;
+    std::array<octet, wire::greeting::size> a;
     auto const buf = asio::buffer(a.data(), a.size());
     asio::buffer_copy(buf, g.buffer());
 
@@ -52,11 +55,11 @@ TEST_CASE("Signature Round Trip", "[wire]") {
 TEST_CASE("Round Trip uint8_t", "[wire]") {
     using namespace azmqn::detail::transport;
 
-    std::array<octet_t, 1> b;
-    b.fill(octet_t(0));
+    std::array<octet, 1> b;
+    b.fill(octet(0));
 
     wire::put<uint8_t>(asio::buffer(b), 42);
-    REQUIRE(b[0] == octet_t(42));
+    REQUIRE(b[0] == octet(42));
 
     const auto [r, _] = wire::get<uint8_t>(asio::buffer(b));
     REQUIRE(r == 42);
@@ -65,8 +68,8 @@ TEST_CASE("Round Trip uint8_t", "[wire]") {
 TEST_CASE("Round Trip uint16_t", "[wire]") {
     using namespace azmqn::detail::transport;
 
-    std::array<octet_t, sizeof(uint16_t)> b;
-    b.fill(octet_t(0));
+    std::array<octet, sizeof(uint16_t)> b;
+    b.fill(octet(0));
 
     wire::put<uint16_t>(boost::asio::buffer(b), 0xabba);
     REQUIRE(*reinterpret_cast<uint16_t const*>(b.data()) == 0xbaab);
@@ -77,8 +80,8 @@ TEST_CASE("Round Trip uint16_t", "[wire]") {
 TEST_CASE("Round Trip uint32_t", "[wire]") {
     using namespace azmqn::detail::transport;
 
-    std::array<octet_t, sizeof(uint32_t)> b;
-    b.fill(octet_t(0));
+    std::array<octet, sizeof(uint32_t)> b;
+    b.fill(octet(0));
 
     wire::put<uint32_t>(boost::asio::buffer(b), 0xabcdef01);
     REQUIRE(*reinterpret_cast<uint32_t const*>(b.data()) == 0x01efcdab);
@@ -89,8 +92,8 @@ TEST_CASE("Round Trip uint32_t", "[wire]") {
 TEST_CASE("Round Trip uint64_t", "[wire]") {
     using namespace azmqn::detail::transport;
 
-    std::array<octet_t, sizeof(uint64_t)> b;
-    b.fill(octet_t(0));
+    std::array<octet, sizeof(uint64_t)> b;
+    b.fill(octet(0));
 
     wire::put<uint64_t>(boost::asio::buffer(b), 0xabcdef0102030405);
     REQUIRE(*reinterpret_cast<uint64_t const*>(b.data()) == 0x0504030201efcdab);
@@ -101,14 +104,14 @@ TEST_CASE("Round Trip uint64_t", "[wire]") {
 TEST_CASE("Static frame operations", "[frames]") {
     using namespace azmqn::detail::transport;
 
-    std::array<octet_t, 5> b{ octet_t(0x00), octet_t(0x03),
-                              octet_t('f'), octet_t('o'), octet_t('o') };
+    std::array<octet, 5> b{ octet(0x00), octet(0x03),
+                              octet('f'), octet('o'), octet('o') };
     REQUIRE(!wire::is_more(b[0]));
     REQUIRE(!wire::is_long(b[0]));
     REQUIRE(!wire::is_command(b[0]));
 
-    std::array<octet_t, 5> c{ octet_t(0x06), octet_t(0x03),
-                              octet_t('f'), octet_t('o'), octet_t('o') };
+    std::array<octet, 5> c{ octet(0x06), octet(0x03),
+                              octet('f'), octet('o'), octet('o') };
     REQUIRE(!wire::is_more(c[0]));
     REQUIRE(wire::is_long(c[0]));
     REQUIRE(wire::is_command(c[0]));
@@ -143,11 +146,11 @@ struct sync_read_stream {
 
 TEST_CASE("read short frame", "[frames]") {
     using namespace azmqn::detail;
-    using octet_t = transport::octet_t;
+    using octet = transport::octet;
 
     sync_read_stream s;
-    std::array<octet_t, 5> b{ octet_t(0x00), octet_t(0x03),
-                              octet_t('f'), octet_t('o'), octet_t('o') };
+    std::array<octet, 5> b{ octet(0x00), octet(0x03),
+                              octet('f'), octet('o'), octet('o') };
     s.reset(asio::const_buffers_1{boost::asio::buffer(b)});
 
     auto res = transport::read(s, 1024);
@@ -156,16 +159,40 @@ TEST_CASE("read short frame", "[frames]") {
 
 TEST_CASE("read long frame", "[frames]") {
     using namespace azmqn::detail;
-    using octet_t = transport::octet_t;
+    using octet = transport::octet;
 
     sync_read_stream s;
-    std::array<transport::octet_t, 512 + transport::wire::max_framing_octets> b{ octet_t(0x02), octet_t(0) };
-    auto buf = asio::buffer(b) + sizeof(transport::octet_t);
+    std::array<transport::octet, 512 + transport::wire::max_framing_octets> b{ octet(0x02), octet(0) };
+    auto buf = asio::buffer(b) + sizeof(transport::octet);
     transport::wire::put<uint64_t>(buf, b.size() - transport::wire::max_framing_octets);
 
-    std::fill(b.begin() + transport::wire::max_framing_octets, b.end(), octet_t('o'));
+    std::fill(b.begin() + transport::wire::max_framing_octets, b.end(), octet('o'));
     s.reset(asio::const_buffers_1{boost::asio::buffer(b)});
 
     auto res = transport::read(s, 1024);
     //REQUIRE(res.message());
+}
+
+struct sync_write_stream {
+    using octet = azmqn::detail::transport::octet;
+    using buf_t = std::vector<octet>;
+    buf_t buf_;
+
+    template<typename BufferSequence>
+    size_t write_some(BufferSequence const& bufs, boost::system::error_code& ec) {
+        size_t bytes_transferred = boost::accumulate(bufs, 0, [](auto const& b, auto x) {
+                                        return x + boost::asio::buffer_size(b);
+                                   });
+        buf_.reserve(buf_.size() + bytes_transferred);
+        boost::for_each(bufs, [this](auto const& b) {
+                std::copy_n(boost::asio::buffer_cast<octet const*>(b), boost::asio::buffer_size(b),
+                                std::back_inserter(buf_));
+            });
+        return bytes_transferred;
+    }
+};
+
+TEST_CASE("write short frame", "[frames]") {
+    using namespace azmqn::detail;
+    using octet = transport::octet;
 }
