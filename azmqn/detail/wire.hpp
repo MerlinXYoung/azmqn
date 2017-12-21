@@ -9,7 +9,7 @@
 #ifndef AZMQN_DETAIL_WIRE_HPP
 #define AZMQN_DETAIL_WIRE_HPP
 
-#include "buffer.hpp"
+#include "../asio/buffer.hpp"
 #include "../asio/read.hpp"
 
 #include <boost/assert.hpp>
@@ -31,6 +31,9 @@
 #include <algorithm>
 
 namespace  azmqn::detail::transport {
+    constexpr uint8_t default_vmajor = 0x03;
+    constexpr uint8_t default_vminor = 0x01;
+
     namespace wire {
         struct mechanism_name {
             static constexpr auto max_size = 20ul;
@@ -40,7 +43,11 @@ namespace  azmqn::detail::transport {
             { BOOST_ASSERT(val_.size() <= max_size); }
 
             boost::string_view value() const { return val_; }
-            size_t filler() const { return max_size - val_.size(); }
+            template<typename Iterator>
+            Iterator fill(Iterator it) {
+                auto filler = max_size - val_.size();
+                return std::fill_n(it, filler, utility::octet(0));
+            }
 
             bool operator==(mechanism_name const& lhs) const { return val_ == lhs.val_; }
             bool operator<(mechanism_name const& lhs) const { return val_ < lhs.val_; }
@@ -52,38 +59,40 @@ namespace  azmqn::detail::transport {
             boost::string_view val_;
         };
 
+        utility::octet as_server(bool v) { return utility::octet(as_server ?  0x1 : 0x0); }
+
         struct greeting {
             static constexpr auto size = 64;
-            using version_t = std::underlying_type_t<octet>;
+            using version_t = std::underlying_type_t<utility::octet>;
 
-            greeting(mechanism_name mechanism, bool as_server,
-                         version_t vmajor = 0x03, version_t vminor = 0x01) noexcept {
-                static constexpr auto tfn = [](auto x) { return octet(x); };
-                auto it = boost::copy(signature | boost::adaptors::transformed(tfn),
-                                      std::begin(buf_));
+            greeting(mechanism_name mechanism, bool is_server,
+                         version_t vmajor = default_vmajor,
+                         version_t vminor = default_vminor) noexcept {
+                using namespace boost::adaptors;
+                using namespace utility;
+                static constexpr auto tfn = [](auto x) { return utility::octet(x); };
+                auto it = boost::copy(signature | transformed(tfn), std::begin(buf_));
+
                 *it++ = octet(vmajor);
                 *it++ = octet(vminor);
 
-                it = boost::copy(mechanism.value() | boost::adaptors::transformed(tfn),
-                                 it);
+                it = boost::copy(mechanism.value() | transformed(tfn), it);
 
-                it = std::fill_n(it, mechanism.filler(), octet(0));
+                it = mechanism.fill(it);
 
-                *it++ = octet(as_server ?  0x1 : 0x0);
+                *it++ = as_server(is_server);
                 boost::fill(boost::make_iterator_range(it, std::end(buf_)), octet(0));
             }
 
-            greeting(const_buffer_t buf) noexcept {
-                auto const it = buffer_data(buf);
-                std::copy(it, it + size, std::begin(buf_));
-            }
+            greeting(boost::asio::const_buffer buf) noexcept
+            { boost::copy(asio::buffer_range(buf), std::begin(buf_)); }
 
-            const_buffer_t buffer() const { return boost::asio::buffer(buf_); }
+            boost::asio::const_buffer buffer() const { return boost::asio::buffer(buf_); }
 
             bool valid() const {
                 auto [r, _] = boost::range::mismatch(signature, buf_,
                                     [](auto const& x, auto const& y) {
-                                        return octet(x) == y;
+                                        return utility::octet(x) == y;
                                     });
                 return r == std::end(signature);
             }
@@ -104,23 +113,24 @@ namespace  azmqn::detail::transport {
 
             bool is_server() const {
                 auto const it = std::begin(buf_) + signature.size() + 2 + mechanism_name::max_size;
-                return *it == octet(0x1);
+                return *it == utility::octet(0x1);
             }
 
             friend std::ostream& operator<<(std::ostream& stm, greeting const& that) {
+                using namespace asio;
                 return stm << that.buffer();
             }
 
         private:
             static constexpr auto signature_size = 10;
             static constexpr auto filler_size = 31;
-            static constexpr std::array<std::underlying_type_t<octet>, signature_size> signature =
+            static constexpr std::array<std::underlying_type_t<utility::octet>, signature_size> signature =
                 { 0xff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x7f };
 
-            std::array<octet, size> buf_;
+            std::array<utility::octet, size> buf_;
         };
 
-        enum class flags : std::underlying_type_t<octet> {
+        enum class flags : std::underlying_type_t<utility::octet> {
             is_message = 0x0,
             is_more = 0x1,
             is_long = 0x2,
@@ -128,19 +138,19 @@ namespace  azmqn::detail::transport {
             none = 0x0
         };
 
-        constexpr octet operator+(flags f) noexcept
-        { return octet(static_cast<std::underlying_type_t<flags>>(f)); }
+        constexpr utility::octet operator+(flags f) noexcept
+        { return utility::octet(static_cast<std::underlying_type_t<flags>>(f)); }
 
-        constexpr bool is_set(octet o, flags f) noexcept
+        constexpr bool is_set(utility::octet o, flags f) noexcept
         { return utility::to_integer<bool>(o & +f); }
 
-        constexpr static bool is_more(octet o) noexcept
+        constexpr static bool is_more(utility::octet o) noexcept
         { return is_set(o, flags::is_more); }
 
-        constexpr static bool is_long(octet o) noexcept
+        constexpr static bool is_long(utility::octet o) noexcept
         { return is_set(o, flags::is_long); }
 
-        constexpr static bool is_command(octet o) noexcept
+        constexpr static bool is_command(utility::octet o) noexcept
         { return is_set(o, flags::is_command); }
 
         // ZMTP uses network byte order
@@ -152,49 +162,46 @@ namespace  azmqn::detail::transport {
 
         // ZMTP only defines byte order for unsigned types
         template<typename T>
-        auto put(at_least_mutable_buffer<sizeof(T)> b, T val) noexcept
-            -> typename std::enable_if<std::is_unsigned<T>::value, mutable_buffer_t>::type {
-            auto eb = reinterpret_cast<endian_buffer_t<T>*>(b.data());
-            *eb = val;
+        auto put(asio::at_least_mutable_buffer<sizeof(T)> b, T val) noexcept
+            -> typename std::enable_if_t<std::is_unsigned_v<T>, boost::asio::mutable_buffer> {
+            *reinterpret_cast<endian_buffer_t<T>*>(b.data()) = val;
             return b.consume();
         }
 
         template<typename T>
-        using result_t = std::pair<T, const_buffer_t>;
+        using get_result_t = std::pair<T, boost::asio::const_buffer>;
 
         // ZMTP only defines byte order for unsigned types
         template<typename T>
-        auto get(at_least_const_buffer<sizeof(T)> b) noexcept
-            -> typename std::enable_if<std::is_unsigned<T>::value, result_t<T>>::type {
+        auto get(asio::at_least_const_buffer<sizeof(T)> b) noexcept
+            -> typename std::enable_if_t<std::is_unsigned_v<T>, get_result_t<T>> {
             auto eb = reinterpret_cast<endian_buffer_t<T> const*>(b.data());
             return std::make_pair(eb->value(), b.consume());
         }
 
-        constexpr auto min_framing_octets = 1 + sizeof(octet);
+        constexpr auto min_framing_octets = 1 + sizeof(utility::octet);
         constexpr auto max_framing_octets = 1 + sizeof(uint64_t);
 
-        static_assert(min_framing_octets > sizeof(octet));
+        static_assert(min_framing_octets > sizeof(utility::octet));
         static_assert(max_framing_octets > sizeof(uint64_t));
 
         constexpr auto small_size = 64;
-        constexpr auto max_small_size = std::numeric_limits<std::underlying_type_t<octet>>::max();
-        using buffer_t = backed_buffer<small_size>;
+        constexpr auto max_small_size = std::numeric_limits<std::underlying_type_t<utility::octet>>::max();
+        using buffer_t = asio::backed_buffer<small_size>;
 
         struct frame {
-            using framing_t = std::array<octet, max_framing_octets>;
-
             frame()
-            { framing_[0] = octet(0); }
+            { framing_[0] = utility::octet(0); }
 
             size_t bytes_transferred() const noexcept { return bytes_transferred_; }
 
             bool empty() const noexcept { return bytes_transferred_ == 0; }
 
-            mutable_buffer_t mutable_buffer() noexcept {
+            boost::asio::mutable_buffer mutable_buffer() noexcept {
                 return boost::asio::buffer(framing_);
             }
 
-            const_buffer_t const_buffer() const noexcept {
+            boost::asio::const_buffer const_buffer() const noexcept {
                 BOOST_ASSERT(!empty());
                 return boost::asio::buffer(framing_.data(), is_long()
                             ? max_framing_octets
@@ -272,12 +279,11 @@ namespace  azmqn::detail::transport {
             }
 
         private:
-            framing_t framing_;
+            std::array<utility::octet, max_framing_octets> framing_;
             size_t bytes_transferred_ = 0;
 
             template<typename SyncReadStream>
             asio::read_result_type read_until_long_framed(SyncReadStream& s) {
-                using namespace boost;
                 static const auto long_size = max_framing_octets - min_framing_octets;
                 auto res = asio::read(s, boost::asio::buffer(&framing_[min_framing_octets], long_size));
                 if (res) {
@@ -306,7 +312,6 @@ namespace  azmqn::detail::transport {
         private:
             int32_t val_;
         };
-
     } // namespace wire
 } // namespace namespace azmqn::detail::transport
 #endif // AZMQN_DETAIL_WIRE_HPP

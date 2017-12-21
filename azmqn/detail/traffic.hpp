@@ -27,8 +27,8 @@ namespace  azmqn::detail::transport {
 
             using buffer_t::buffer_t;
 
-            mutable_buffer_t set_framing(at_least_mutable_buffer<sizeof(max_framing_octets)> b) const noexcept {
-                *b.data() = octet(tag_type::value) | get_flags() | is_long();
+            boost::asio::mutable_buffer set_framing(asio::at_least_mutable_buffer<sizeof(max_framing_octets)> b) const noexcept {
+                *b.data() = utility::octet(tag_type::value) | get_flags() | is_long();
                 auto bb = b.consume();
                 return utility::to_integer<bool>(is_long()) ? put<uint64_t>(bb, size())
                                                             : put<uint8_t>(bb, size());
@@ -70,7 +70,7 @@ namespace  azmqn::detail::transport {
                 , more(m)
             { }
 
-            message_t(const_buffer_t b, bool m)
+            message_t(boost::asio::const_buffer b, bool m)
                 : traffic(b)
                 , more(m)
             { }
@@ -92,17 +92,17 @@ namespace  azmqn::detail::transport {
 
             bool empty() const noexcept { return val_.which() == 0; } 
 
-            const_buffer_t const_buffer() const noexcept {
+            boost::asio::const_buffer const_buffer() const noexcept {
                 const_buffer_visitor v;
                 return boost::apply_visitor(v, val_);
             }
 
-            mutable_buffer_t mutable_buffer() noexcept {
+            boost::asio::mutable_buffer mutable_buffer() noexcept {
                 mutable_buffer_visitor v;
                 return boost::apply_visitor(v, val_);
             }
 
-            mutable_buffer_t set_framing(mutable_buffer_t b) const noexcept {
+            boost::asio::mutable_buffer set_framing(boost::asio::mutable_buffer b) const noexcept {
                 set_framing_visitor v(b);
                 return boost::apply_visitor(v, val_);
             }
@@ -129,37 +129,37 @@ namespace  azmqn::detail::transport {
             value_type val_;
 
             struct const_buffer_visitor
-                : boost::static_visitor<const_buffer_t> {
-                const_buffer_t operator()(none_t const&) const
-                { return const_buffer_t{ }; }
+                : boost::static_visitor<boost::asio::const_buffer> {
+                boost::asio::const_buffer operator()(none_t const&) const
+                { return boost::asio::const_buffer{ }; }
 
                 template<typename T>
-                const_buffer_t operator()(T const& t) const
+                boost::asio::const_buffer operator()(T const& t) const
                 { return t.const_buffer(); }
             };
 
             struct mutable_buffer_visitor
-                : boost::static_visitor<mutable_buffer_t> {
-                mutable_buffer_t operator()(none_t &) const
-                { return mutable_buffer_t(); }
+                : boost::static_visitor<boost::asio::mutable_buffer> {
+                boost::asio::mutable_buffer operator()(none_t &) const
+                { return boost::asio::mutable_buffer(); }
 
                 template<typename T>
-                mutable_buffer_t operator()(T& t) const
+                boost::asio::mutable_buffer operator()(T& t) const
                 { return t.mutable_buffer(); }
             };
 
             struct set_framing_visitor
-                : boost::static_visitor<mutable_buffer_t> {
-                mutable_buffer_t framing_;
+                : boost::static_visitor<boost::asio::mutable_buffer> {
+                boost::asio::mutable_buffer framing_;
 
-                set_framing_visitor(mutable_buffer_t framing)
+                set_framing_visitor(boost::asio::mutable_buffer framing)
                     : framing_(framing) { }
 
-                mutable_buffer_t operator()(none_t const&) const
-                { return mutable_buffer_t(); }
+                boost::asio::mutable_buffer operator()(none_t const&) const
+                { return boost::asio::mutable_buffer(); }
 
                 template<typename T>
-                mutable_buffer_t operator()(T const& t) const
+                boost::asio::mutable_buffer operator()(T const& t) const
                 { return t.set_framing(framing_); }
             };
 
@@ -180,7 +180,7 @@ namespace  azmqn::detail::transport {
         };
 
         struct writable_message_or_command {
-            using bufs_t = std::array<const_buffer_t, 2>;
+            using bufs_t = std::array<boost::asio::const_buffer, 2>;
 
             writable_message_or_command(maybe_message_or_command data)
                 : data_{ std::move(data) }
@@ -204,7 +204,7 @@ namespace  azmqn::detail::transport {
             bool empty() const { return f_.empty() && data_.empty(); }
             frame& framing() { return f_; }
 
-            mutable_buffer_t mutable_buffer() {
+            boost::asio::mutable_buffer mutable_buffer() {
                 BOOST_ASSERT(f_.valid());
                 data_ = maybe_message_or_command::from_frame(f_);
                 return data_.mutable_buffer();
