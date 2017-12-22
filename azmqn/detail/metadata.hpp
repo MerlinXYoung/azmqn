@@ -27,13 +27,13 @@ namespace azmqn::detail::transport {
 
         metadata() noexcept = default;
 
-        const_buffer_t to_buffer() const noexcept {
+        boost::asio::const_buffer to_buffer() const noexcept {
             if (!pimpl_)
-                return const_buffer_t{ };
+                return boost::asio::const_buffer{ };
             return pimpl_->buf_.const_buffer();
         }
 
-        using result_t = boost::optional<const_buffer_t>;
+        using result_t = boost::optional<boost::asio::const_buffer>;
         result_t operator[](boost::string_view name) const noexcept {
             if (pimpl_) {
                 auto it = boost::range::find_if(pimpl_->props_, [&](auto const x) { return name == x.name; });
@@ -56,7 +56,7 @@ namespace azmqn::detail::transport {
 
         struct prop_t {
             boost::string_view name;
-            const_buffer_t value;
+            boost::asio::const_buffer value;
         };
 
         static
@@ -79,13 +79,12 @@ namespace azmqn::detail::transport {
 
     private:
         struct prop : prop_t {
-            using name_res_t = std::pair<boost::string_view, const_buffer_t>;
-            static name_res_t get_name(const_buffer_t buf, boost::system::error_code& ec) noexcept {
-                using namespace boost;
+            using name_res_t = std::pair<boost::string_view, boost::asio::const_buffer>;
+            static name_res_t get_name(boost::asio::const_buffer buf, boost::system::error_code& ec) noexcept {
                 uint8_t len;
                 std::tie(len, buf) = wire::get<uint8_t>(buf);
-                if (buffer_size(buf) < len) {
-                    ec = make_error_code(system::errc::message_size);
+                if (asio::buffer_size(buf) < len) {
+                    ec = make_error_code(boost::system::errc::message_size);
                     return std::make_pair(boost::string_view{ }, buf);
                 }
 
@@ -93,29 +92,28 @@ namespace azmqn::detail::transport {
                                          buf + len);
             }
 
-            using value_res_t = std::pair<const_buffer_t, const_buffer_t>;
-            static value_res_t get_value(const_buffer_t buf, boost::system::error_code& ec) noexcept {
-                using namespace boost;
+            using value_res_t = std::pair<boost::asio::const_buffer, boost::asio::const_buffer>;
+            static value_res_t get_value(boost::asio::const_buffer buf, boost::system::error_code& ec) noexcept {
                 uint32_t len;
                 std::tie(len, buf) = wire::get<uint32_t>(buf);
-                if (buffer_size(buf) < len) {
-                    ec = make_error_code(system::errc::message_size);
-                    return std::make_pair(const_buffer_t{ }, const_buffer_t{ });
+                if (asio::buffer_size(buf) < len) {
+                    ec = make_error_code(boost::system::errc::message_size);
+                    return std::make_pair(boost::asio::const_buffer{ }, boost::asio::const_buffer{ });
                 }
 
-                auto const value = buffer_data(buf);
+                auto const value = asio::buffer_data(buf);
                 return std::make_pair(boost::asio::buffer(value, len), buf + len);
             }
 
-            using prop_res_t = std::pair<prop, const_buffer_t>;
+            using prop_res_t = std::pair<prop, boost::asio::const_buffer>;
             static
-            prop_res_t from_buffer(const_buffer_t buf, boost::system::error_code& ec) noexcept {
+            prop_res_t from_buffer(boost::asio::const_buffer buf, boost::system::error_code& ec) noexcept {
                 boost::string_view name;
                 std::tie(name, buf) = get_name(buf, ec);
                 if (ec)
                     return std::make_pair(prop{ }, buf);
 
-                const_buffer_t value;
+                boost::asio::const_buffer value;
                 std::tie(value, buf) = get_value(buf, ec);
                 if (ec)
                     return std::make_pair(prop{ }, buf);
@@ -124,7 +122,7 @@ namespace azmqn::detail::transport {
         };
 
         struct props_vec_t : boost::container::small_vector<prop, 16> {
-            static props_vec_t from_buffer(const_buffer_t buf, size_t hint) {
+            static props_vec_t from_buffer(boost::asio::const_buffer buf, size_t hint) {
                 props_vec_t res;
                 res.reserve(hint);
                 while (boost::asio::buffer_size(buf)) {

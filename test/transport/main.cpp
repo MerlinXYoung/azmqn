@@ -23,6 +23,8 @@
 namespace asio = boost::asio;
 namespace range = boost::range;
 
+using octet = azmqn::utility::octet;
+
 TEST_CASE("Signature Round Trip", "[wire]") {
     using namespace azmqn::detail::transport;
 
@@ -146,7 +148,6 @@ struct sync_read_stream {
 
 TEST_CASE("read short frame", "[frames]") {
     using namespace azmqn::detail;
-    using octet = transport::octet;
 
     sync_read_stream s;
     std::array<octet, 5> b{ octet(0x00), octet(0x03),
@@ -159,11 +160,10 @@ TEST_CASE("read short frame", "[frames]") {
 
 TEST_CASE("read long frame", "[frames]") {
     using namespace azmqn::detail;
-    using octet = transport::octet;
 
     sync_read_stream s;
-    std::array<transport::octet, 512 + transport::wire::max_framing_octets> b{ octet(0x02), octet(0) };
-    auto buf = asio::buffer(b) + sizeof(transport::octet);
+    std::array<octet, 512 + transport::wire::max_framing_octets> b{ octet(0x02), octet(0) };
+    auto buf = asio::buffer(b) + sizeof(octet);
     transport::wire::put<uint64_t>(buf, b.size() - transport::wire::max_framing_octets);
 
     std::fill(b.begin() + transport::wire::max_framing_octets, b.end(), octet('o'));
@@ -174,7 +174,6 @@ TEST_CASE("read long frame", "[frames]") {
 }
 
 struct sync_write_stream {
-    using octet = azmqn::detail::transport::octet;
     using buf_t = std::vector<octet>;
     buf_t buf_;
 
@@ -194,5 +193,4 @@ struct sync_write_stream {
 
 TEST_CASE("write short frame", "[frames]") {
     using namespace azmqn::detail;
-    using octet = transport::octet;
 }
