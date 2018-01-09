@@ -20,6 +20,8 @@
 namespace  azmqn::detail::transport {
     namespace wire {
         // Base type for traffic
+        using framing_result_t = std::pair<size_t, boost::asio::mutable_buffer>;
+
         template<typename T, flags selector>
         struct traffic : buffer_t {
             using self_type = T;
@@ -27,11 +29,10 @@ namespace  azmqn::detail::transport {
 
             using buffer_t::buffer_t;
 
-            boost::asio::mutable_buffer set_framing(asio::at_least_mutable_buffer<sizeof(max_framing_octets)> b) const noexcept {
-                *b.data() = utility::octet(tag_type::value) | get_flags() | is_long();
-                auto bb = b.consume();
-                return utility::to_integer<bool>(is_long()) ? put<uint64_t>(bb, size())
-                                                            : put<uint8_t>(bb, size());
+            framing_result_t set_framing(asio::at_least_mutable_buffer<sizeof(max_framing_octets)> b) const noexcept {
+                auto const flags = utility::octet(tag_type::value) | get_flags() | is_long();
+                auto res = wire::set_framing(b, flags, size());
+                return std::make_pair(size(), res);
             }
 
         private:
@@ -82,12 +83,12 @@ namespace  azmqn::detail::transport {
         using message_or_command = boost::variant<message_t, command_t>;
         struct maybe_message_or_command {
             maybe_message_or_command() = default;
-            maybe_message_or_command(command_t c) noexcept
-                : val_{ std::move(c) }
+            maybe_message_or_command(command_t&& c) noexcept
+                : val_{ std::forward<command_t>(c) }
             { }
 
-            maybe_message_or_command(message_t m) noexcept
-                : val_{ std::move(m) }
+            maybe_message_or_command(message_t&& m) noexcept
+                : val_{ std::forward<message_t>(m) }
             { }
 
             bool empty() const noexcept { return val_.which() == 0; } 
@@ -102,7 +103,7 @@ namespace  azmqn::detail::transport {
                 return boost::apply_visitor(v, val_);
             }
 
-            boost::asio::mutable_buffer set_framing(boost::asio::mutable_buffer b) const noexcept {
+            framing_result_t set_framing(boost::asio::mutable_buffer b) const noexcept {
                 set_framing_visitor v(b);
                 return boost::apply_visitor(v, val_);
             }
@@ -149,17 +150,17 @@ namespace  azmqn::detail::transport {
             };
 
             struct set_framing_visitor
-                : boost::static_visitor<boost::asio::mutable_buffer> {
+                : boost::static_visitor<framing_result_t> {
                 boost::asio::mutable_buffer framing_;
 
                 set_framing_visitor(boost::asio::mutable_buffer framing)
                     : framing_(framing) { }
 
-                boost::asio::mutable_buffer operator()(none_t const&) const
-                { return boost::asio::mutable_buffer(); }
+                framing_result_t operator()(none_t const&) const
+                { return std::make_pair(0, boost::asio::mutable_buffer()); }
 
                 template<typename T>
-                boost::asio::mutable_buffer operator()(T const& t) const
+                framing_result_t operator()(T const& t) const
                 { return t.set_framing(framing_); }
             };
 
@@ -182,19 +183,25 @@ namespace  azmqn::detail::transport {
         struct writable_message_or_command {
             using bufs_t = std::array<boost::asio::const_buffer, 2>;
 
-            writable_message_or_command(maybe_message_or_command data)
-                : data_{ std::move(data) }
+            writable_message_or_command(command_t&& c) noexcept
+                : data_{ std::forward<command_t>(c) }
             { }
+
+            writable_message_or_command(message_t&& m) noexcept
+                : data_{ std::forward<message_t>(m) }
+            { }
+
 
             bool empty() const { data_.empty(); }
 
             bufs_t buffer_sequence() const {
-                wire::frame f;
-                data_.set_framing(f.mutable_buffer());
-                return bufs_t{ f.const_buffer(), data_.const_buffer() };
+                auto [size, _] = data_.set_framing(f_.mutable_buffer());
+                f_.set_size(size);
+                return bufs_t{ f_.const_buffer(), data_.const_buffer() };
             }
 
         private:
+            mutable wire::frame f_;
             maybe_message_or_command data_;
         };
 

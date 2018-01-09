@@ -153,6 +153,9 @@ namespace  azmqn::detail::transport {
         constexpr static bool is_command(utility::octet o) noexcept
         { return is_set(o, flags::is_command); }
 
+        constexpr static bool is_message(utility::octet o) noexcept
+        { return !is_command(o); }
+
         // ZMTP uses network byte order
         template<typename T>
         using endian_buffer_t = boost::endian::endian_buffer<
@@ -195,6 +198,7 @@ namespace  azmqn::detail::transport {
 
             bool empty() const noexcept { return bytes_transferred_ == 0; }
 
+            void set_size(size_t fsize) noexcept { bytes_transferred_ = fsize; }
             boost::asio::mutable_buffer mutable_buffer() noexcept {
                 return boost::asio::buffer(framing_);
             }
@@ -310,6 +314,13 @@ namespace  azmqn::detail::transport {
         private:
             int32_t val_;
         };
+
+        static boost::asio::mutable_buffer set_framing(asio::at_least_mutable_buffer<sizeof(max_framing_octets)> b, utility::octet flags, size_t size) {
+            *b.data() = flags;
+            auto bb = b.consume(sizeof(utility::octet));
+            return is_long(flags) ? put<uint64_t>(bb, size)
+                                  : put<uint8_t>(bb, size);
+        }
     } // namespace wire
 } // namespace namespace azmqn::detail::transport
 #endif // AZMQN_DETAIL_WIRE_HPP

@@ -51,7 +51,8 @@ namespace azmqn::utility {
         using error_type = E;
 
         explicit bad_expected_access(E err)
-            : err_{ std::move(err) }
+            : logic_error{ "unexpected value access" }
+            , err_{ std::move(err) }
         { }
 
         constexpr error_type const& error() const { return err_; }

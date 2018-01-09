@@ -1,3 +1,5 @@
+#define BOOST_ENABLE_ASSERT_HANDLER
+
 #include <azmqn/utility/octet.hpp>
 
 #include <azmqn/asio/read.hpp>
@@ -19,6 +21,12 @@
 
 #define CATCH_CONFIG_MAIN
 #include <test/catch.hpp>
+
+namespace boost {
+    void assertion_failed(char const* expr, char const* function, char const* file, long line) {
+        FAIL("Assertion: " << expr << " in " << function << "\n\t" << file << ":" << line);
+    }
+} // namespace boost
 
 namespace asio = boost::asio;
 namespace range = boost::range;
@@ -146,6 +154,67 @@ struct sync_read_stream {
     }
 };
 
+struct sync_write_stream {
+    using buf_t = std::vector<octet>;
+    buf_t buf_;
+
+    template<typename BufferSequence>
+    size_t write_some(BufferSequence const& bufs, boost::system::error_code& ec) {
+        size_t bytes_transferred = boost::accumulate(bufs | boost::adaptors::transformed([](auto const& b) {
+                                                                    return boost::asio::buffer_size(b);
+                                                                }), 0);
+        buf_.reserve(buf_.size() + bytes_transferred);
+        boost::for_each(bufs, [this](auto const& b) {
+                std::copy_n(boost::asio::buffer_cast<octet const*>(b), boost::asio::buffer_size(b),
+                                std::back_inserter(buf_));
+            });
+        return bytes_transferred;
+    }
+};
+
+TEST_CASE("Framing operations", "[frames]") {
+    using namespace azmqn::detail::transport;
+
+    auto REQUIRE_f_is_empty = [](auto& f) {
+        REQUIRE(f.bytes_transferred() == 0);
+        REQUIRE(f.empty());
+        REQUIRE(!f.valid());
+    };
+
+    std::array<octet, 5> b{ octet(0x00), octet(0x03),
+                              octet('f'), octet('o'), octet('o') };
+    {
+        wire::frame f;
+        REQUIRE_f_is_empty(f);
+
+        sync_read_stream s;
+        s.reset(asio::const_buffers_1{boost::asio::buffer(b)});
+        auto res = f.read(s);
+        REQUIRE(res.has_value());
+        REQUIRE(res.value() == 2);
+        REQUIRE(f.valid());
+        REQUIRE(f.bytes_transferred() == 2);
+    }
+
+    {
+        wire::frame f;
+        REQUIRE_f_is_empty(f);
+
+        auto buf = f.mutable_buffer();
+        auto bdata = azmqn::asio::buffer_data(buf);
+        bdata[0] = b[0];
+        bdata[1] = b[1];
+        f.set_size(2);
+        REQUIRE(f.valid());
+        REQUIRE(!f.empty());
+        REQUIRE(f.bytes_transferred() == 2);
+        auto const cbuf = f.const_buffer();
+        auto const cdata = azmqn::asio::buffer_data(cbuf);
+        REQUIRE(cdata[0] == b[0]);
+        REQUIRE(cdata[1] == b[1]);
+    }
+}
+
 TEST_CASE("read short frame", "[frames]") {
     using namespace azmqn::detail;
 
@@ -173,24 +242,22 @@ TEST_CASE("read long frame", "[frames]") {
     //REQUIRE(res.message());
 }
 
-struct sync_write_stream {
-    using buf_t = std::vector<octet>;
-    buf_t buf_;
-
-    template<typename BufferSequence>
-    size_t write_some(BufferSequence const& bufs, boost::system::error_code& ec) {
-        size_t bytes_transferred = boost::accumulate(bufs, 0, [](auto const& b, auto x) {
-                                        return x + boost::asio::buffer_size(b);
-                                   });
-        buf_.reserve(buf_.size() + bytes_transferred);
-        boost::for_each(bufs, [this](auto const& b) {
-                std::copy_n(boost::asio::buffer_cast<octet const*>(b), boost::asio::buffer_size(b),
-                                std::back_inserter(buf_));
-            });
-        return bytes_transferred;
-    }
-};
 
 TEST_CASE("write short frame", "[frames]") {
-    using namespace azmqn::detail;
+    using namespace azmqn::detail::transport;
+
+    sync_write_stream s;
+    boost::string_view payload{ "foo" };
+    wire::writable_message_or_command w{ wire::message_t{ boost::asio::buffer(payload.data(), payload.size()), false } };
+
+    auto res = write(s, w);
+    REQUIRE(res.has_value());
+    REQUIRE(res.value() == wire::min_framing_octets + payload.size());
+
+    auto buf = *boost::asio::buffer(s.buf_).begin();
+    auto bdata = azmqn::asio::buffer_data(buf);
+    REQUIRE(wire::is_message(bdata[0]));
+    REQUIRE(!wire::is_long(bdata[0]));
+    auto [v, _] = wire::get<uint8_t>(boost::asio::buffer(buf + 1));
+    REQUIRE(v == payload.size());
 }

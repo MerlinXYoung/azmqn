@@ -75,8 +75,8 @@ namespace  azmqn::asio {
 
         utility::octet const* data() const noexcept { return buffer_data(b_); }
 
-        Buffer consume() const noexcept
-        { return b_ + min_size; }
+        Buffer consume(size_t size = min_size) const noexcept
+        { return b_ + size; }
 
     protected:
         Buffer b_;
