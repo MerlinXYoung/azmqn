@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2013-2017 Contributors as noted in the AUTHORS file
+    Copyright (c) 2013-2018 Contributors as noted in the AUTHORS file
 
     This file is part of azmq
 
@@ -71,6 +71,7 @@ namespace  azmqn::detail::transport {
                 using namespace boost::adaptors;
                 using namespace utility;
                 static constexpr auto tfn = [](auto x) { return utility::octet(x); };
+
                 auto it = boost::copy(signature | transformed(tfn), std::begin(buf_));
 
                 *it++ = octet(vmajor);
@@ -300,7 +301,7 @@ namespace  azmqn::detail::transport {
             constexpr static int32_t max() { return std::numeric_limits<int32_t>::max(); }
             constexpr read_limit(int32_t val) noexcept
                 : val_{ std::clamp(val, 0, max()) }
-            { }
+            { BOOST_ASSERT(val >= 0); }
 
             using result_t = utility::expected<void, boost::system::error_code>;
             result_t check(frame const& f) const {
