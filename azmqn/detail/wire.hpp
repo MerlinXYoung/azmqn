@@ -35,10 +35,10 @@ namespace  azmqn::detail::transport {
     constexpr uint8_t default_vminor = 0x01;
 
     namespace wire {
-        struct mechanism_name {
+        struct mechanism_name_view {
             static constexpr auto max_size = 20ul;
 
-            mechanism_name(boost::string_view val) noexcept
+            mechanism_name_view(boost::string_view val) noexcept
                 : val_{ val }
             { BOOST_ASSERT(val_.size() <= max_size); }
 
@@ -49,12 +49,12 @@ namespace  azmqn::detail::transport {
                 return std::fill_n(it, filler, utility::octet(0));
             }
 
-            bool operator==(mechanism_name const& lhs) const { return val_ == lhs.val_; }
-            bool operator<(mechanism_name const& lhs) const { return val_ < lhs.val_; }
-            bool operator>(mechanism_name const& lhs) const { return val_ > lhs.val_; }
-            bool operator<=(mechanism_name const& lhs) const { return val_ <= lhs.val_; }
-            bool operator>=(mechanism_name const& lhs) const { return val_ >= lhs.val_; }
-            bool operator!=(mechanism_name const& lhs) const { return val_ != lhs.val_; }
+            bool operator==(mechanism_name_view const& lhs) const { return val_ == lhs.val_; }
+            bool operator<(mechanism_name_view const& lhs) const { return val_ < lhs.val_; }
+            bool operator>(mechanism_name_view const& lhs) const { return val_ > lhs.val_; }
+            bool operator<=(mechanism_name_view const& lhs) const { return val_ <= lhs.val_; }
+            bool operator>=(mechanism_name_view const& lhs) const { return val_ >= lhs.val_; }
+            bool operator!=(mechanism_name_view const& lhs) const { return val_ != lhs.val_; }
         private:
             boost::string_view val_;
         };
@@ -65,7 +65,7 @@ namespace  azmqn::detail::transport {
             static constexpr auto size = 64;
             using version_t = std::underlying_type_t<utility::octet>;
 
-            greeting(mechanism_name mechanism, bool is_server,
+            greeting(mechanism_name_view mechanism, bool is_server,
                          version_t vmajor = default_vmajor,
                          version_t vminor = default_vminor) noexcept {
                 using namespace boost::adaptors;
@@ -104,15 +104,15 @@ namespace  azmqn::detail::transport {
                 return std::make_pair(static_cast<version_t>(*it), static_cast<version_t>(*(it + 1)));
             }
 
-            mechanism_name mechanism() const {
+            mechanism_name_view mechanism() const {
                 auto const it = std::begin(buf_) + signature.size() + 2;
                 auto const c = reinterpret_cast<char const*>(&*it);
-                auto len = std::min(::strlen(c), mechanism_name::max_size);
+                auto len = std::min(::strlen(c), mechanism_name_view::max_size);
                 return boost::string_view(c, len);
             }
 
             bool is_server() const {
-                auto const it = std::begin(buf_) + signature.size() + 2 + mechanism_name::max_size;
+                auto const it = std::begin(buf_) + signature.size() + 2 + mechanism_name_view::max_size;
                 return *it == utility::octet(0x1);
             }
 

@@ -25,7 +25,7 @@ namespace azmqn::detail::transport {
         struct mechanism_concept {
             virtual ~mechanism_concept() = default;
             virtual boost::asio::const_buffer get_mechanism() const = 0;
-            virtual wire::mechanism_name get_name() const = 0;
+            virtual wire::mechanism_name_view get_name() const = 0;
 
             virtual state_ptr init_state() const = 0;
             virtual boost::optional<wire::command_t> process_command(state_ptr&, wire::command_t const&) const = 0;
@@ -53,7 +53,7 @@ namespace azmqn::detail::transport {
             { }
         };
 
-        boost::optional<mechanism> find_mechanism(wire::mechanism_name name) const {
+        boost::optional<mechanism> find_mechanism(wire::mechanism_name_view name) const {
             auto it = boost::range::find_if(mechanisms_, [&](auto const& m) {
                     return m->get_name() == name;
                 });
@@ -71,7 +71,7 @@ namespace azmqn::detail::transport {
         struct mechanism_model final : mechanism_concept {
             using state_type = typename T::state_type;
             T data_;
-            std::array<utility::octet, wire::mechanism_name::max_size> mbuf_;
+            std::array<utility::octet, wire::mechanism_name_view::max_size> mbuf_;
 
             mechanism_model(T t) : data_(std::move(t)) {
                 boost::range::fill(mbuf_, 0);

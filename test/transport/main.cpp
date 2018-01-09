@@ -36,7 +36,7 @@ using octet = azmqn::utility::octet;
 TEST_CASE("Signature Round Trip", "[wire]") {
     using namespace azmqn::detail::transport;
 
-    wire::mechanism_name mechanism("NULL");
+    wire::mechanism_name_view mechanism("NULL");
     wire::greeting g{ mechanism, true };
     REQUIRE(g.valid());
     {
