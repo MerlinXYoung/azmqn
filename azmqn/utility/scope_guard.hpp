@@ -9,13 +9,12 @@
     This is an implementation of Andrei Alexandrescu's ScopeGuard type from
     the "Systematic Error Handling in C++" talk given at C++ And Beyond 2012
 */
-#ifndef AZMQ_SCOPE_GUARD_HPP_
-#define AZMQ_SCOPE_GUARD_HPP_
+#ifndef AZMQN_SCOPE_GUARD_HPP_
+#define AZMQN_SCOPE_GUARD_HPP_
 
 #include <utility>
 
-namespace azmq {
-namespace util {
+namespace azmqn::utility {
 template<class F>
 class scope_guard_t {
     F func_;
@@ -48,8 +47,7 @@ template<class F>
 scope_guard_t<F> operator+(scope_guard_on_exit, F && func) {
     return scope_guard<F>(std::forward<F>(func));
 }
-} // namespace util
-} // namespace azmq
+} // namespace azmqn::utility
 
 #define CONCATENATE_IMPL(s1, s2) s1##s2
 #define CONCATENATE(s1, s2) CONCATENATE_IMPL(s1, s2)
@@ -62,5 +60,5 @@ scope_guard_t<F> operator+(scope_guard_on_exit, F && func) {
 #endif // __COUNTER__
 
 #define SCOPE_EXIT\
-    auto ANONYMOUS_VARIABLE(SCOPE_EXIT_STATE) = azmq::util::scope_guard_on_exit() + [&]()
-#endif // AZMQ_SCOPE_GUARD_HPP_
+    auto ANONYMOUS_VARIABLE(SCOPE_EXIT_STATE) = azmqn::utility::scope_guard_on_exit() + [&]()
+#endif // AZMQN_SCOPE_GUARD_HPP_

@@ -64,8 +64,9 @@ namespace azmqn::utility {
     { return octet(~static_cast<uint8_t>(o)); }
 
     std::ostream& operator<<(std::ostream& stm, octet that) {
-        return stm << "0123456789abcdef"[static_cast<uint8_t>(that) / 16]
-                   << "0123456789abcdef"[static_cast<uint8_t>(that) % 16];
+        static auto const hex = "0123456789abcdef";
+        return stm << hex[static_cast<uint8_t>(that) / 16]
+                   << hex[static_cast<uint8_t>(that) % 16];
     }
 }
 
