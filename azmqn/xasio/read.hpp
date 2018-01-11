@@ -6,14 +6,14 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 */
-#ifndef AZMQN_ASIO_READ_HPP
-#define AZMQN_ASIO_READ_HPP
+#ifndef AZMQN_XASIO_READ_HPP
+#define AZMQN_XASIO_READ_HPP
 
 #include "../utility/expected.hpp"
 
 #include <boost/asio/read.hpp>
 
-namespace azmqn::asio {
+namespace azmqn::xasio {
     using read_result_type = utility::expected<size_t, boost::system::error_code>;
 
     template<typename SyncReadStream,
@@ -40,5 +40,5 @@ namespace azmqn::asio {
                     }
                 });
     }
-} // namespace azmqn::asio
-#endif // AZMQN_ASIO_READ_HPP
+} // namespace azmqn::xasio
+#endif // AZMQN_XASIO_READ_HPP

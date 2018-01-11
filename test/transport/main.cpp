@@ -11,7 +11,7 @@
 
 #include <azmqn/utility/octet.hpp>
 
-#include <azmqn/asio/read.hpp>
+#include <azmqn/xasio/read.hpp>
 
 #include <azmqn/detail/wire.hpp>
 #include <azmqn/detail/framed_io.hpp>
@@ -210,7 +210,7 @@ TEST_CASE("Framing operations", "[frames]") {
         REQUIRE_f_is_empty(f);
 
         auto buf = f.mutable_buffer();
-        auto bdata = azmqn::asio::buffer_data(buf);
+        auto bdata = azmqn::xasio::buffer_data(buf);
         bdata[0] = b[0];
         bdata[1] = b[1];
         f.set_size(2);
@@ -218,7 +218,7 @@ TEST_CASE("Framing operations", "[frames]") {
         REQUIRE(!f.empty());
         REQUIRE(f.bytes_transferred() == 2);
         auto const cbuf = f.const_buffer();
-        auto const cdata = azmqn::asio::buffer_data(cbuf);
+        auto const cdata = azmqn::xasio::buffer_data(cbuf);
         REQUIRE(cdata[0] == b[0]);
         REQUIRE(cdata[1] == b[1]);
     }
@@ -264,7 +264,7 @@ TEST_CASE("write short frame", "[frames]") {
     REQUIRE(res.value() == wire::min_framing_octets + payload.size());
 
     auto buf = *boost::asio::buffer(s.buf_).begin();
-    auto bdata = azmqn::asio::buffer_data(buf);
+    auto bdata = azmqn::xasio::buffer_data(buf);
     REQUIRE(wire::is_message(bdata[0]));
     REQUIRE(!wire::is_long(bdata[0]));
     auto [v, _] = wire::get<uint8_t>(boost::asio::buffer(buf + 1));

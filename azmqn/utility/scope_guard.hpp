@@ -16,10 +16,7 @@
 
 namespace azmqn::utility {
 template<class F>
-class scope_guard_t {
-    F func_;
-    bool active_;
-public:
+struct scope_guard_t {
     scope_guard_t(F func) : func_(std::move(func)), active_(true) { }
     ~scope_guard_t() {
         if (active_) func_();
@@ -35,6 +32,9 @@ public:
         active_(rhs.active_) {
             rhs.dismiss();
         }
+private:
+    F func_;
+    bool active_;
 };
 
 template<class F>

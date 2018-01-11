@@ -6,14 +6,14 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 */
-#ifndef AZMQN_ASIO_WRITE_HPP
-#define AZMQN_ASIO_WRITE_HPP
+#ifndef AZMQN_XASIO_WRITE_HPP
+#define AZMQN_XASIO_WRITE_HPP
 
 #include "../utility/expected.hpp"
 
 #include <boost/asio/write.hpp>
 
-namespace azmqn::asio {
+namespace azmqn::xasio {
     using write_result_type = utility::expected<size_t, boost::system::error_code>;
 
     template<typename SyncWriteStream,
@@ -40,7 +40,7 @@ namespace azmqn::asio {
                 }
         });
     }
-} // namespace azmqn::asio
-#endif // AZMQN_ASIO_WRITE_HPP
+} // namespace azmqn::xasio
+#endif // AZMQN_XASIO_WRITE_HPP
 
 

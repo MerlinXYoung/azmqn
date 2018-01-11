@@ -29,10 +29,10 @@ namespace  azmqn::detail::transport {
 
             using buffer_t::buffer_t;
 
-            framing_result_t set_framing(asio::at_least_mutable_buffer<sizeof(max_framing_octets)> b) const noexcept {
+            framing_result_t set_framing(xasio::at_least_mutable_buffer<sizeof(max_framing_octets)> b) const noexcept {
                 auto const flags = utility::octet(tag_type::value) | get_flags() | is_long();
                 auto res = wire::set_framing(b, flags, size());
-                return std::make_pair(size(), res);
+                return { size(), res };
             }
 
         private:

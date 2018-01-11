@@ -9,8 +9,8 @@
 #ifndef AZMQN_DETAIL_WIRE_HPP
 #define AZMQN_DETAIL_WIRE_HPP
 
-#include "../asio/buffer.hpp"
-#include "../asio/read.hpp"
+#include "../xasio/buffer.hpp"
+#include "../xasio/read.hpp"
 
 #include <boost/assert.hpp>
 #include <boost/utility/string_view.hpp>
@@ -86,7 +86,7 @@ namespace  azmqn::detail::transport {
             }
 
             greeting(boost::asio::const_buffer buf) noexcept
-            { boost::copy(asio::buffer_range(buf), std::begin(buf_)); }
+            { boost::copy(xasio::buffer_range(buf), std::begin(buf_)); }
 
             boost::asio::const_buffer buffer() const { return boost::asio::buffer(buf_); }
 
@@ -102,7 +102,7 @@ namespace  azmqn::detail::transport {
             version_result_t version() const {
                 BOOST_ASSERT(valid());
                 auto const it = std::begin(buf_) + signature.size();
-                return std::make_pair(static_cast<version_t>(*it), static_cast<version_t>(*(it + 1)));
+                return { static_cast<version_t>(*it), static_cast<version_t>(*(it + 1)) };
             }
 
             mechanism_name_view mechanism() const {
@@ -118,7 +118,7 @@ namespace  azmqn::detail::transport {
             }
 
             friend std::ostream& operator<<(std::ostream& stm, greeting const& that) {
-                using namespace asio;
+                using namespace xasio;
                 return stm << that.buffer();
             }
 
@@ -166,7 +166,7 @@ namespace  azmqn::detail::transport {
 
         // ZMTP only defines byte order for unsigned types
         template<typename T>
-        auto put(asio::at_least_mutable_buffer<sizeof(T)> b, T val) noexcept
+        auto put(xasio::at_least_mutable_buffer<sizeof(T)> b, T val) noexcept
             -> typename std::enable_if_t<std::is_unsigned_v<T>, boost::asio::mutable_buffer> {
             *reinterpret_cast<endian_buffer_t<T>*>(b.data()) = val;
             return b.consume();
@@ -174,11 +174,11 @@ namespace  azmqn::detail::transport {
 
         // ZMTP only defines byte order for unsigned types
         template<typename T>
-        auto get(asio::at_least_const_buffer<sizeof(T)> b) noexcept
+        auto get(xasio::at_least_const_buffer<sizeof(T)> b) noexcept
             -> typename std::enable_if_t<  std::is_unsigned_v<T>
                                          , std::pair<T, boost::asio::const_buffer>> {
             auto eb = reinterpret_cast<endian_buffer_t<T> const*>(b.data());
-            return std::make_pair(eb->value(), b.consume());
+            return { eb->value(), b.consume() };
         }
 
         constexpr auto min_framing_octets = 1 + sizeof(utility::octet);
@@ -189,7 +189,7 @@ namespace  azmqn::detail::transport {
 
         constexpr auto small_size = 64;
         constexpr auto max_small_size = std::numeric_limits<std::underlying_type_t<utility::octet>>::max();
-        using buffer_t = asio::backed_buffer<small_size>;
+        using buffer_t = xasio::backed_buffer<small_size>;
 
         struct frame {
             frame()
@@ -252,9 +252,9 @@ namespace  azmqn::detail::transport {
             }
 
             template<typename SyncReadStream>
-            asio::read_result_type read(SyncReadStream& s) {
+            xasio::read_result_type read(SyncReadStream& s) {
                 BOOST_ASSERT(empty());
-                auto rr = asio::read(s, boost::asio::buffer(framing_.data(), min_framing_octets));
+                auto rr = xasio::read(s, boost::asio::buffer(framing_.data(), min_framing_octets));
                 if (rr) {
                     bytes_transferred_ = *rr;
                     if (is_long()) {
@@ -271,7 +271,7 @@ namespace  azmqn::detail::transport {
                 BOOST_ASSERT(empty());
 
                 asio::async_read(s, boost::asio::buffer(framing_.data(), min_framing_octets),
-                                 [&, handler{ std::move(handler) }](asio::read_result_type rr) {
+                                 [&, handler{ std::move(handler) }](xasio::read_result_type rr) {
                                         if(rr) {
                                             bytes_transferred_ = *rr;
                                             if (is_long())
@@ -286,9 +286,9 @@ namespace  azmqn::detail::transport {
             size_t bytes_transferred_ = 0;
 
             template<typename SyncReadStream>
-            asio::read_result_type read_until_long_framed(SyncReadStream& s) {
+            xasio::read_result_type read_until_long_framed(SyncReadStream& s) {
                 static const auto long_size = max_framing_octets - min_framing_octets;
-                auto res = asio::read(s, boost::asio::buffer(&framing_[min_framing_octets], long_size));
+                auto res = xasio::read(s, boost::asio::buffer(&framing_[min_framing_octets], long_size));
                 if (res) {
                     bytes_transferred_ += *res;
                     return bytes_transferred_;
@@ -316,7 +316,7 @@ namespace  azmqn::detail::transport {
             int32_t val_;
         };
 
-        static boost::asio::mutable_buffer set_framing(asio::at_least_mutable_buffer<sizeof(max_framing_octets)> b, utility::octet flags, size_t size) {
+        static boost::asio::mutable_buffer set_framing(xasio::at_least_mutable_buffer<sizeof(max_framing_octets)> b, utility::octet flags, size_t size) {
             *b.data() = flags;
             auto bb = b.consume(sizeof(utility::octet));
             return is_long(flags) ? put<uint64_t>(bb, size)

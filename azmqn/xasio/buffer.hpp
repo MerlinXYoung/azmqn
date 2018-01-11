@@ -6,8 +6,8 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 */
-#ifndef AZMQN_ASIO_BUFFER_HPP
-#define AZMQN_ASIO_BUFFER_HPP
+#ifndef AZMQN_XASIO_BUFFER_HPP
+#define AZMQN_XASIO_BUFFER_HPP
 
 #include "../utility/octet.hpp"
 
@@ -20,7 +20,7 @@
 #include <algorithm>
 #include <ostream>
 
-namespace  azmqn::asio {
+namespace  azmqn::xasio {
     utility::octet* buffer_data(boost::asio::mutable_buffer buf) noexcept
     { return boost::asio::buffer_cast<utility::octet*>(buf); }
 
@@ -132,4 +132,4 @@ namespace  azmqn::asio {
         { return boost::asio::buffer(v_.data(), size()); }
     };
 } // namespace namespace azmqn::detail::transport
-#endif // AZMQN_ASIO_BUFFER_HPP
+#endif // AZMQN_XASIO_BUFFER_HPP

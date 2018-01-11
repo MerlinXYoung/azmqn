@@ -83,7 +83,7 @@ namespace azmqn::detail::transport {
             static name_res_t get_name(boost::asio::const_buffer buf, boost::system::error_code& ec) noexcept {
                 uint8_t len;
                 std::tie(len, buf) = wire::get<uint8_t>(buf);
-                if (asio::buffer_size(buf) < len) {
+                if (xasio::buffer_size(buf) < len) {
                     ec = make_error_code(boost::system::errc::message_size);
                     return std::make_pair(boost::string_view{ }, buf);
                 }
@@ -96,12 +96,12 @@ namespace azmqn::detail::transport {
             static value_res_t get_value(boost::asio::const_buffer buf, boost::system::error_code& ec) noexcept {
                 uint32_t len;
                 std::tie(len, buf) = wire::get<uint32_t>(buf);
-                if (asio::buffer_size(buf) < len) {
+                if (xasio::buffer_size(buf) < len) {
                     ec = make_error_code(boost::system::errc::message_size);
                     return std::make_pair(boost::asio::const_buffer{ }, boost::asio::const_buffer{ });
                 }
 
-                auto const value = asio::buffer_data(buf);
+                auto const value = xasio::buffer_data(buf);
                 return std::make_pair(boost::asio::buffer(value, len), buf + len);
             }
 

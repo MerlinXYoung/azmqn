@@ -13,8 +13,8 @@
 #include "wire.hpp"
 #include "traffic.hpp"
 
-#include "../asio/read.hpp"
-#include "../asio/write.hpp"
+#include "../xasio/read.hpp"
+#include "../xasio/write.hpp"
 
 #include <array>
 
@@ -34,15 +34,15 @@ namespace  azmqn::detail::transport {
             return rr.error();
         }
 
-        if (auto const rr = asio::read(s, boost::asio::buffer(r.mutable_buffer())); !rr) {
+        if (auto const rr = xasio::read(s, boost::asio::buffer(r.mutable_buffer())); !rr) {
             return rr.error();
         }
         return r.detach();
     }
 
     template<typename SyncWriteStream>
-    asio::write_result_type write(SyncWriteStream& s, wire::writable_message_or_command const& w) {
-        return asio::write(s, w.buffer_sequence());
+    xasio::write_result_type write(SyncWriteStream& s, wire::writable_message_or_command const& w) {
+        return xasio::write(s, w.buffer_sequence());
     }
 
     // The readable_message_or_command argument must remain valid until the
@@ -57,13 +57,13 @@ namespace  azmqn::detail::transport {
         BOOST_ASSERT(r.empty());
         auto& framing = r.framing();
         framing.async_read(s,
-            [&, handler{ std::move(handler) }, rlimit](asio::read_result_type rr) {
+            [&, handler{ std::move(handler) }, rlimit](xasio::read_result_type rr) {
                 if (rr) {
                     if (auto const rr = rlimit.check(r.framing()); !rr) {
                         handler(rr.error());
                     } else {
-                        asio::async_read(s, boost::asio::buffer(r.mutable_buffer()),
-                            [&, handler{ std::move(handler) }](asio::read_result_type rr) {
+                        xasio::async_read(s, boost::asio::buffer(r.mutable_buffer()),
+                            [&, handler{ std::move(handler) }](xasio::read_result_type rr) {
                                 if (rr) {
                                     handler(r.detach());
                                 } else {
@@ -85,7 +85,7 @@ namespace  azmqn::detail::transport {
     void async_write(AsyncWriteStream& s, wire::writable_message_or_command const& w,
                         CompletionHandler&& handler) {
         BOOST_ASSERT(!w.empty());
-        asio::async_write(s, w.buffer_sequence(), std::forward<CompletionHandler>(handler));
+        xasio::async_write(s, w.buffer_sequence(), std::forward<CompletionHandler>(handler));
     }
 } // namespace azmqn::detail::transport
 
